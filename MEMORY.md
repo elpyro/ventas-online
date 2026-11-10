@@ -7,6 +7,8 @@ Actualizar solo en hitos importantes, no en cada conversación.
 ## Estado actual
 
 - Proyecto Firebase: `ventas-online-ec`. CLI fijado con `firebase use ventas-online-ec`.
+- **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
+  Flujo: `git add . && git commit -m "..." && git push`.
 - **Producción intacta**: Functions y reglas nuevas no están desplegadas.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
 - Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
