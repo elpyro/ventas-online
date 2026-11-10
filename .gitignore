@@ -1,0 +1,55 @@
+# --- Secretos y variables de entorno ---
+.env
+.env.local
+.env.*.local
+functions/.env
+functions/.env.local
+web/.env.local
+web/.env.*.local
+!functions/.env.example
+!web/.env.local.example
+
+# --- Credenciales de firma Android ---
+*.jks
+*.keystore
+admin/android/key.properties
+
+# --- Dependencias ---
+node_modules/
+functions/node_modules/
+web/node_modules/
+
+# --- Build / artefactos ---
+.next/
+**/.next/
+functions/lib/
+admin/build/
+admin/.dart_tool/
+admin/.flutter-plugins-dependencies
+admin/android/.gradle/
+admin/android/app/build/
+admin/android/local.properties
+*.apk
+*.aab
+*.ipa
+
+# --- Firebase / emuladores ---
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# --- Capturas y archivos temporales del proyecto ---
+admin_*.png
+verify_*.png
+visit-*.png
+*-debug.png
+*.tsbuildinfo
+*.tmp
+*.bak
+
+# --- Sistema y editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

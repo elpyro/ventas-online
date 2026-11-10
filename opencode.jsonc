@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Estado vivo del proyecto: se recarga en cada sesión.
+  "instructions": ["MEMORY.md"],
+
+  // Abrir siempre en modo Plan (solo lectura) hasta cambiar de agente.
+  "default_agent": "plan",
+
+  "permissions": [
+    // Confirmar antes de desplegar o sembrar datos (especialmente en producción).
+    { "action": "shell", "resource": "*firebase deploy*", "effect": "ask" },
+    { "action": "shell", "resource": "*seed*", "effect": "ask" }
+  ]
+}

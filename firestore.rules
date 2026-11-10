@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /products/{sku} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /catalogs/{catalogId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /store_config/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /private_config/{doc} {
+      allow read, write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /customers/{phone} {
+      allow read, write: if request.auth != null && request.auth.token.phone_number == phone;
+    }
+    match /orders/{orderId} {
+      // Los pedidos se crean solo con la Cloud Function `createOrder` (Admin SDK).
+      allow create: if false;
+      allow read: if request.auth != null && (resource.data.customerPhone == request.auth.token.phone_number || request.auth.token.admin == true);
+      allow update, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /order_drafts/{draftId} {
+      // Borradores "Seleccionando": solo se escriben con la Function
+      // `saveSelectingDraft` (Admin SDK). Lee admin.
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow create, update, delete: if false;
+    }
+    match /admin_tokens/{token} {
+      allow read, write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /metrics/visits {
+      // Contador acumulado (compatibilidad) + subcolección history/{YYYY-MM-DD}.
+      // El APK lee todo con claim admin:true; la web solo suma +1.
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow create: if request.resource.data.keys().hasOnly(['anonymous', 'registered', 'updatedAt'])
+        && ((request.resource.data.get('anonymous', 0) == 1 && request.resource.data.get('registered', 0) == 0)
+         || (request.resource.data.get('registered', 0) == 1 && request.resource.data.get('anonymous', 0) == 0));
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['anonymous', 'registered', 'updatedAt'])
+        && (
+             (request.resource.data.anonymous == resource.data.anonymous + 1
+              && request.resource.data.registered == resource.data.registered)
+         || (request.resource.data.registered == resource.data.registered + 1
+             && request.resource.data.anonymous == resource.data.anonymous)
+        );
+      match /history/{date} {
+        allow read: if request.auth != null && request.auth.token.admin == true;
+        allow create: if request.resource.data.keys().hasOnly(['anonymous', 'registered', 'updatedAt'])
+          && ((request.resource.data.get('anonymous', 0) == 1 && request.resource.data.get('registered', 0) == 0)
+           || (request.resource.data.get('registered', 0) == 1 && request.resource.data.get('anonymous', 0) == 0));
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['anonymous', 'registered', 'updatedAt'])
+          && (
+               (request.resource.data.anonymous == resource.data.anonymous + 1
+                && request.resource.data.registered == resource.data.registered)
+           || (request.resource.data.registered == resource.data.registered + 1
+               && request.resource.data.anonymous == resource.data.anonymous)
+          );
+        match /customers/{customerId} {
+          allow read: if request.auth != null && request.auth.token.admin == true;
+          allow create: if request.resource.data.keys().hasOnly(['name', 'phone', 'at'])
+            && request.resource.data.get('name', '') != ''
+            && request.resource.data.get('phone', '') != '';
+          allow update: if request.resource.data.keys().hasOnly(['name', 'phone', 'at'])
+            && request.resource.data.get('name', '') != ''
+            && request.resource.data.get('phone', '') != '';
+        }
+      }
+    }
+  }
+}

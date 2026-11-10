@@ -1,0 +1,5 @@
+<paths>
+    <cache-path name="pdfs" path="." />
+    <external-cache-path name="pdfs" path="." />
+    <files-path name="pdfs" path="." />
+</paths>
