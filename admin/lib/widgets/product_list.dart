@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../screens/bulk_edit_screen.dart';
 import '../screens/product_edit_screen.dart';
 import '../services/search_normalizer.dart';
 import '../theme/soft_theme.dart';
@@ -89,6 +91,11 @@ class _ProductListState extends State<ProductList> {
   late ProductSort sort;
   late final Stream<QuerySnapshot> _stream;
 
+  /// Modo multiselección: se activa manteniendo presionado un producto.
+  /// Los SKUs elegidos se guardan en un set (el ID del producto es su SKU).
+  final Set<String> _selectedSkus = {};
+  bool _selectionMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -110,131 +117,223 @@ class _ProductListState extends State<ProductList> {
   Widget build(BuildContext context) {
     final stream = _stream;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: widget.catalogId == null
-                        ? 'Buscar por nombre, marca o código…'
-                        : 'Buscar en este catálogo…',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+    // Con el multiselector activo, el botón atrás primero sale del modo de
+    // selección; cerrar la pantalla requiere un segundo toque.
+    return PopScope(
+      canPop: !_selectionMode,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _exitSelection();
+      },
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: widget.catalogId == null
+                          ? 'Buscar por nombre, marca o código…'
+                          : 'Buscar en este catálogo…',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    onChanged: (value) => setState(
+                        () => query = SearchNormalizer.normalize(value)),
                   ),
-                  onChanged: (value) =>
-                      setState(() => query = SearchNormalizer.normalize(value)),
                 ),
-              ),
-              const SizedBox(width: 4),
-              PopupMenuButton<ProductSort>(
-                icon: const Icon(Icons.sort),
-                tooltip: 'Ordenar',
-                initialValue: sort,
-                onSelected: (value) async {
-                  setState(() => sort = value);
-                  if (value == ProductSort.displayOrder) return;
-                  if (!mounted) return;
-                  final apply = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Aplicar orden a la web'),
-                      content: Text(
-                          '¿Quieres que el catálogo web (cliente) use este orden?\n\n"${productSortLabel(value)}"\n\nSe reordenarán todos los productos y se guardará el nuevo orden.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Solo aquí'),
+                const SizedBox(width: 4),
+                PopupMenuButton<ProductSort>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: 'Ordenar',
+                  initialValue: sort,
+                  onSelected: (value) async {
+                    setState(() => sort = value);
+                    if (value == ProductSort.displayOrder) return;
+                    if (!mounted) return;
+                    final apply = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Aplicar orden a la web'),
+                        content: Text(
+                            '¿Quieres que el catálogo web (cliente) use este orden?\n\n"${productSortLabel(value)}"\n\nSe reordenarán todos los productos y se guardará el nuevo orden.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Solo aquí'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Sí, aplicar a la web'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (apply == true && mounted) {
+                      await _applySortToWeb();
+                    }
+                  },
+                  itemBuilder: (context) => ProductSort.values
+                      .map((e) => PopupMenuItem(
+                            value: e,
+                            child: Text(productSortLabel(e)),
+                          ))
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: ProductFilter.values
+                  .map((f) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(productFilterLabel(f)),
+                          selected: filter == f,
+                          onSelected: (_) => setState(() => filter = f),
                         ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Sí, aplicar a la web'),
-                        ),
-                      ],
+                      ))
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: stream,
+              builder: (context, snap) {
+                Widget body;
+                var docs = const <QueryDocumentSnapshot>[];
+                if (snap.hasError) {
+                  body = Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                          'No se pudieron cargar los productos: ${snap.error}'),
                     ),
                   );
-                  if (apply == true && mounted) {
-                    await _applySortToWeb();
-                  }
-                },
-                itemBuilder: (context) => ProductSort.values
-                    .map((e) => PopupMenuItem(
-                          value: e,
-                          child: Text(productSortLabel(e)),
-                        ))
-                    .toList(),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: ProductFilter.values
-                .map((f) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(productFilterLabel(f)),
-                        selected: filter == f,
-                        onSelected: (_) => setState(() => filter = f),
+                } else if (!snap.hasData) {
+                  body = const Center(child: CircularProgressIndicator());
+                } else {
+                  docs = snap.data!.docs.where(_matches).toList();
+                  _applySort(docs);
+                  body = docs.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Text(
+                              query.isEmpty
+                                  ? 'No hay productos para este filtro.'
+                                  : 'Ningún producto coincide con la búsqueda.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: docs.length,
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemBuilder: (context, i) => _ProductTile(
+                            doc: docs[i],
+                            selectionMode: _selectionMode,
+                            selected: _selectedSkus.contains(docs[i].id),
+                            onEnterSelection: () => _enterSelection(docs[i].id),
+                            onToggleSelection: () =>
+                                _toggleSelection(docs[i].id),
+                          ),
+                        );
+                }
+                return Column(
+                  children: [
+                    if (_selectionMode)
+                      _SelectionBar(
+                        count: _selectedSkus.length,
+                        onClose: _exitSelection,
+                        onToggleAll: () => _toggleSelectAll(docs),
+                        onEdit: () => _openBulkEdit(docs),
+                        allSelected: docs.isNotEmpty &&
+                            docs.every((d) => _selectedSkus.contains(d.id)),
                       ),
-                    ))
-                .toList(),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: stream,
-            builder: (context, snap) {
-              if (snap.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                        'No se pudieron cargar los productos: ${snap.error}'),
-                  ),
+                    Expanded(child: body),
+                  ],
                 );
-              }
-              if (!snap.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              var docs = snap.data!.docs.where(_matches).toList();
-              _applySort(docs);
-
-              if (docs.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      query.isEmpty
-                          ? 'No hay productos para este filtro.'
-                          : 'Ningún producto coincide con la búsqueda.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-              return ListView.builder(
-                itemCount: docs.length,
-                padding: const EdgeInsets.only(bottom: 16),
-                itemBuilder: (context, i) => _ProductTile(doc: docs[i]),
-              );
-            },
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  // ------------------------------------------------------------------
+  // Multiselección (long-press para activarla)
+  // ------------------------------------------------------------------
+  void _enterSelection(String sku) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _selectionMode = true;
+      _selectedSkus.add(sku);
+    });
+  }
+
+  void _toggleSelection(String sku) {
+    setState(() {
+      if (!_selectedSkus.remove(sku)) {
+        _selectedSkus.add(sku);
+      }
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedSkus.clear();
+    });
+  }
+
+  void _toggleSelectAll(List<QueryDocumentSnapshot> docs) {
+    setState(() {
+      final allSelected =
+          docs.isNotEmpty && docs.every((d) => _selectedSkus.contains(d.id));
+      if (allSelected) {
+        for (final d in docs) {
+          _selectedSkus.remove(d.id);
+        }
+      } else {
+        _selectedSkus.addAll(docs.map((d) => d.id));
+      }
+    });
+  }
+
+  Future<void> _openBulkEdit(List<QueryDocumentSnapshot> docs) async {
+    // Solo los seleccionados que siguen visibles (el filtro puede haber
+    // cambiado desde que se marcaron).
+    final selected = docs.where((d) => _selectedSkus.contains(d.id)).toList();
+    if (selected.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BulkEditScreen(
+          products: [
+            for (final d in selected)
+              BulkEditProduct(
+                sku: d.id,
+                name: (d.data() as Map<String, dynamic>)['name']?.toString() ??
+                    d.id,
+                data: d.data() as Map<String, dynamic>,
+              ),
+          ],
+        ),
+      ),
+    );
+    if (mounted) _exitSelection();
   }
 
   bool _matches(QueryDocumentSnapshot doc) {
@@ -343,9 +442,22 @@ class _ProductListState extends State<ProductList> {
 }
 
 class _ProductTile extends StatelessWidget {
-  const _ProductTile({required this.doc});
+  const _ProductTile({
+    required this.doc,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onEnterSelection,
+    this.onToggleSelection,
+  });
 
   final QueryDocumentSnapshot doc;
+
+  /// Multiselección activa: tocar el tile alterna la selección en vez de
+  /// abrir el editor individual.
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onEnterSelection;
+  final VoidCallback? onToggleSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -362,11 +474,15 @@ class _ProductTile extends StatelessWidget {
     final brand = data['brand']?.toString() ?? '';
 
     return SoftTile(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ProductEditScreen(sku: doc.id, data: data),
-        ),
-      ),
+      selected: selected,
+      onTap: selectionMode
+          ? onToggleSelection
+          : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProductEditScreen(sku: doc.id, data: data),
+                ),
+              ),
+      onLongPress: onEnterSelection,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -464,7 +580,69 @@ class _ProductTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right, size: 20, color: SoftTheme.textMuted),
+          if (selectionMode)
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              size: 24,
+              color: selected ? SoftTheme.cBlue : SoftTheme.textMuted,
+            )
+          else
+            const Icon(Icons.chevron_right,
+                size: 20, color: SoftTheme.textMuted),
+        ],
+      ),
+    );
+  }
+}
+
+/// Barra contextual del multiselección: contador, seleccionar todos y
+/// abrir la edición masiva. Vive encima de la lista, dentro del Scaffold.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.count,
+    required this.allSelected,
+    required this.onClose,
+    required this.onToggleAll,
+    required this.onEdit,
+  });
+
+  final int count;
+  final bool allSelected;
+  final VoidCallback onClose;
+  final VoidCallback onToggleAll;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: SoftTheme.cardDecoration(radius: 16),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Salir de la selección',
+            onPressed: onClose,
+          ),
+          Expanded(
+            child: Text(
+              count == 1 ? '1 seleccionado' : '$count seleccionados',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+            ),
+          ),
+          IconButton(
+            icon: Icon(allSelected ? Icons.deselect : Icons.select_all),
+            tooltip: allSelected
+                ? 'Quitar toda la selección'
+                : 'Seleccionar todos los visibles',
+            onPressed: onToggleAll,
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Editar seleccionados',
+            onPressed: count == 0 ? null : onEdit,
+          ),
         ],
       ),
     );

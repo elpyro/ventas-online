@@ -73,8 +73,9 @@ abstract final class SoftTheme {
         ),
       ];
 
-  /// Decoración exterior del tile (igual que la lista de productos)
-  static BoxDecoration tileDecoration() => BoxDecoration(
+  /// Decoración exterior del tile (igual que la lista de productos).
+  /// [borderColor] resalta el tile, p. ej. cuando está seleccionado.
+  static BoxDecoration tileDecoration({Color? borderColor}) => BoxDecoration(
         borderRadius: BorderRadius.circular(radiusTile),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -84,6 +85,9 @@ abstract final class SoftTheme {
             outline.withValues(alpha: 0.6),
           ],
         ),
+        border: borderColor != null
+            ? Border.all(color: borderColor, width: 1.6)
+            : null,
         boxShadow: tileShadow,
       );
 
@@ -393,12 +397,18 @@ class SoftTile extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
+    this.onLongPress,
+    this.selected = false,
     this.margin = const EdgeInsets.fromLTRB(12, 6, 12, 6),
     this.padding = const EdgeInsets.all(12),
   });
 
   final Widget child;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Resalta el tile con borde azul (p. ej. cuando está seleccionado).
+  final bool selected;
   final EdgeInsetsGeometry margin;
   final EdgeInsetsGeometry padding;
 
@@ -406,7 +416,9 @@ class SoftTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: margin,
-      decoration: SoftTheme.tileDecoration(),
+      decoration: SoftTheme.tileDecoration(
+        borderColor: selected ? SoftTheme.cBlue : null,
+      ),
       padding: const EdgeInsets.all(1.2),
       child: Card(
         elevation: 0,
@@ -417,6 +429,7 @@ class SoftTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Padding(
             padding: padding,
             child: child,
