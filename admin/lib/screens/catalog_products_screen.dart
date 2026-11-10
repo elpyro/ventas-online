@@ -1,14 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import '../theme/soft_theme.dart';
+import 'package:flutter/material.dart';
 import '../widgets/product_list.dart';
-import 'catalog_edit_screen.dart';
 import 'product_edit_screen.dart';
 
 /// Muestra los productos de un catálogo concreto, con la misma experiencia
 /// que la pestaña Productos (búsqueda sin tildes, filtro y orden).
 /// Incluye un botón flotante para crear un nuevo producto dentro de este
-/// catálogo y, en la AppBar, el acceso para editar el catálogo mismo.
+/// catálogo.
 class CatalogProductsScreen extends StatelessWidget {
   const CatalogProductsScreen({
     super.key,
@@ -23,30 +21,7 @@ class CatalogProductsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: SoftTheme.background,
-      appBar: AppBar(
-        title: Text(catalogTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune),
-            tooltip: 'Editar catálogo',
-            onPressed: () async {
-              final doc = await FirebaseFirestore.instance
-                  .collection('catalogs')
-                  .doc(catalogId)
-                  .get();
-              if (!context.mounted) return;
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CatalogEditScreen(
-                    id: catalogId,
-                    data: doc.data(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(catalogTitle)),
       floatingActionButton: _NewProductFab(
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(

@@ -196,6 +196,16 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
                             ],
                           ),
                         ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          tooltip: 'Editar catálogo',
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CatalogEditScreen(id: d.id, data: data),
+                            ),
+                          ),
+                        ),
                         const Icon(Icons.chevron_right,
                             size: 20, color: SoftTheme.textMuted),
                       ],
