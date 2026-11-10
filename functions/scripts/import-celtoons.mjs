@@ -13,6 +13,8 @@
 //      - variantes: la talla lleva el nombre del modelo (ej. "SAMSUNG A57") porque
 //        la ficha muestra chips por talla/color; el precio de variante solo se
 //        guarda si difiere del precio del producto.
+//      - catálogo: si `tecnologiaymas` ya existe en el destino (creado desde el
+//        APK), se conserva sin tocar; solo se crea si falta.
 //
 // Uso:
 //   node scripts/import-celtoons.mjs --dry     # resumen sin escribir nada
@@ -235,6 +237,12 @@ async function main() {
   const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ??
     path.join(process.env.APPDATA ?? process.env.USERPROFILE ?? "", "gcloud", "application_default_credentials.json");
   const hasAdc = fs.existsSync(adcPath);
+  if (!firestoreEmulator && !hasAdc) {
+    throw new Error(
+      "Se intentó escribir en PRODUCCIÓN sin credenciales ADC. " +
+        "Corre primero: gcloud auth application-default login"
+    );
+  }
   const app = initializeApp(
     hasAdc ? { credential: applicationDefault(), projectId } : { projectId },
   );
@@ -300,25 +308,27 @@ async function main() {
     console.log(`Imágenes copiadas: ${copied} · fallidas (quedaron con URL vieja): ${kept}`);
   }
 
-  // 3) Portada del catálogo: la primera imagen copiada de un producto llamativo.
-  const coverCandidate =
-    docs.find((d) => /SMARTWATCH|BLUETOOTH|PARLANTE/i.test(d.doc.name) && d.doc.images.length > 0)?.doc.images[0] ??
-    docs.find((d) => d.doc.images.length > 0)?.doc.images[0] ?? "";
-
-  const catalogData = {
-    title: CATALOG_TITLE,
-    coverImage: coverCandidate,
-    isActive: true,
-    isVisible: true,
-    minOrderSubtotal: 0,
-    priority: 0,
-  };
-
-  // 4) Escribir catálogo + productos en lotes (máx 400 ops por batch).
-  await db.doc(`catalogs/${CATALOG_ID}`).set(
-    { ...catalogData, updatedAt: FieldValue.serverTimestamp() },
-    { merge: true },
-  );
+  // 3) Catálogo: si ya existe en el destino (p. ej. creado desde el APK con su
+  // propia portada), no se toca. Solo se crea si falta.
+  const catalogRef = db.doc(`catalogs/${CATALOG_ID}`);
+  const existingCatalog = await catalogRef.get();
+  if (existingCatalog.exists) {
+    console.log(`Catálogo ${CATALOG_ID}: ya existe, se conserva tal cual (edítalo desde el APK).`);
+  } else {
+    await catalogRef.set(
+      {
+        title: CATALOG_TITLE,
+        coverImage: "",
+        isActive: true,
+        isVisible: true,
+        minOrderSubtotal: 0,
+        priority: 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    console.log(`Catálogo ${CATALOG_ID} creado.`);
+  }
   for (let i = 0; i < docs.length; i += 400) {
     const batch = db.batch();
     for (const { doc } of docs.slice(i, i + 400)) {
