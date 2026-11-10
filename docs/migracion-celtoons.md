@@ -1,6 +1,6 @@
 # Migración CELTOONS → VentasOnline
 
-Fecha: 2026-11-10T14:27:32.447Z
+Fecha: 2026-11-10T14:49:36.315Z
 Origen: respaldo JSON del proyecto briges (`Tiendas_CELTOONS_Productos.json`).
 Destino: `ventas-online-ec` · catálogo **Tecnología** (`tecnologiaymas`).
 Productos importados: 280. Precios: `precio_venta` del respaldo.

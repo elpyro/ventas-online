@@ -14,15 +14,18 @@ Actualizar solo en hitos importantes, no en cada conversación.
   Functions (`functions/.env`): el webhook responde 401 y no salen correos.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
 - **Migración CELTOONS** (respaldo JSON del proyecto briges, tienda de celulares):
-  280 productos importados AL EMULADOR con `npm --prefix functions run import:celtoons`
-  (script: `functions/scripts/import-celtoons.mjs`). Un solo catálogo nuevo
-  `tecnologiaymas` ("Tecnología", prioridad 0); los catálogos demo viejos se conservan.
-  Precios desde `precio_venta`; stocks negativos a 0; SKUs saneados (espacios→guiones,
-  vacíos generados del nombre, duplicados con sufijo): la lista completa de cambios está
-  en `docs/migracion-celtoons.md` (177 SKUs). Las 267 fotos se copiaron del Storage de
-  briges al propio (`products/{sku}/images/import-N.jpg` con token de descarga).
-  **Producción NO migrada aún**: requiere `gcloud auth application-default login`
-  (borraría los 8 productos demo). El script es idempotente: se puede re-ejecutar.
+  280 productos importados a PRODUCCIÓN y al emulador con
+  `npm --prefix functions run import:celtoons` (script: `functions/scripts/import-celtoons.mjs`).
+  Catálogo único `tecnologiaymas` ("Tecnología"), creado por el dueño desde el APK
+  (el script no lo pisa si ya existe). Los catálogos demo viejos (`hogar`, `tecnologia`,
+  `m`) se conservaron vacíos. Precios desde `precio_venta`; stocks negativos a 0;
+  SKUs saneados (espacios→guiones, vacíos generados del nombre, duplicados con
+  sufijo): lista completa en `docs/migracion-celtoons.md` (177 SKUs). Las 267 fotos
+  se copiaron al Storage propio (`products/{sku}/images/import-N.jpg` con token).
+  El catálogo con los 8 productos demo de producción fue reemplazado.
+  ADC: `gcloud auth application-default login` con ecbt9Claret@gmail.com (owner
+  del proyecto). REST sin `?key=` dio un 403 transitorio tras la escritura masiva;
+  se recuperó solo.
 - Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
 - Web de emulador en http://localhost:3002 (`next dev`, `NEXT_PUBLIC_USE_EMULATORS=true`).
 - Emulador con datos de PRODUCCIÓN (copiados por `npm --prefix functions run copy:prod`).
@@ -91,10 +94,11 @@ Actualizar solo en hitos importantes, no en cada conversación.
 2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
 3. Tests de reglas/Functions, CI y proyecto `dev` separado.
 4. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
-5. Reemplazar datos demo por datos reales.
-6. Probar la subida de fotos/video desde el APK contra los emuladores
+5. Probar la subida de fotos/video desde el APK contra los emuladores
    (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).
-7. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
+6. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
+7. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
+   desde el APK o borrarlos cuando haya productos reales para ellos.
 
 ## Decisiones
 
