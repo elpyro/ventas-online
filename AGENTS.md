@@ -71,6 +71,10 @@ firebase emulators:start --config firebase.emulators.json --only "functions,fire
 
 ## Trampas conocidas
 
+- El emulador de Firestore puede quedar con reglas viejas si lleva horas corriendo:
+  un GET anónimo que debería ser público responde 403. Volver a guardar
+  `firestore.rules` (aunque no cambie nada) fuerza la recarga en caliente sin
+  perder los datos del emulador.
 - El CLI puede heredar otro proyecto por un mapeo global: verificar con `firebase use --json`.
 - En PowerShell, `--only "functions,firestore"` necesita comillas.
 - Usar `firebase.emulators.json`: el `firebase.json` principal incluye Hosting y pide la experimentación `webframeworks`.

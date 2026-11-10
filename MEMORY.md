@@ -13,6 +13,16 @@ Actualizar solo en hitos importantes, no en cada conversación.
   todavía NO está publicada (Hosting sin releases). Faltan los secretos de
   Functions (`functions/.env`): el webhook responde 401 y no salen correos.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
+- **Migración CELTOONS** (respaldo JSON del proyecto briges, tienda de celulares):
+  280 productos importados AL EMULADOR con `npm --prefix functions run import:celtoons`
+  (script: `functions/scripts/import-celtoons.mjs`). Un solo catálogo nuevo
+  `tecnologiaymas` ("Tecnología", prioridad 0); los catálogos demo viejos se conservan.
+  Precios desde `precio_venta`; stocks negativos a 0; SKUs saneados (espacios→guiones,
+  vacíos generados del nombre, duplicados con sufijo): la lista completa de cambios está
+  en `docs/migracion-celtoons.md` (177 SKUs). Las 267 fotos se copiaron del Storage de
+  briges al propio (`products/{sku}/images/import-N.jpg` con token de descarga).
+  **Producción NO migrada aún**: requiere `gcloud auth application-default login`
+  (borraría los 8 productos demo). El script es idempotente: se puede re-ejecutar.
 - Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
 - Web de emulador en http://localhost:3002 (`next dev`, `NEXT_PUBLIC_USE_EMULATORS=true`).
 - Emulador con datos de PRODUCCIÓN (copiados por `npm --prefix functions run copy:prod`).

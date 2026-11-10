@@ -11,6 +11,7 @@
     "seed": "node scripts/seed.mjs",
     "seed:admin": "node scripts/seed-emulator-admin.mjs",
     "copy:prod": "node scripts/copy-prod-to-emulator.mjs",
+    "import:celtoons": "node scripts/import-celtoons.mjs",
     "admin:claim": "node scripts/set-admin-claim.mjs",
     "webhook:test": "node scripts/test-webhook.mjs",
     "logs": "firebase functions:log"
