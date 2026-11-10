@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../screens/bulk_edit_screen.dart';
 import '../screens/product_edit_screen.dart';
+import '../services/product_media_service.dart';
 import '../services/search_normalizer.dart';
 import '../theme/soft_theme.dart';
 import '../utils/money.dart';
@@ -259,6 +260,7 @@ class _ProductListState extends State<ProductList> {
                         onClose: _exitSelection,
                         onToggleAll: () => _toggleSelectAll(docs),
                         onEdit: () => _openBulkEdit(docs),
+                        onDelete: () => _deleteSelected(docs),
                         allSelected: docs.isNotEmpty &&
                             docs.every((d) => _selectedSkus.contains(d.id)),
                       ),
@@ -334,6 +336,65 @@ class _ProductListState extends State<ProductList> {
       ),
     );
     if (mounted) _exitSelection();
+  }
+
+  Future<void> _deleteSelected(List<QueryDocumentSnapshot> docs) async {
+    // Solo los seleccionados que siguen visibles (el filtro puede haber
+    // cambiado desde que se marcaron).
+    final selected = docs.where((d) => _selectedSkus.contains(d.id)).toList();
+    if (selected.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar productos'),
+        content: Text(
+          'Se eliminarán ${selected.length} producto(s) de la tienda y sus '
+          'fotos y videos. Los pedidos ya creados conservan el nombre y el '
+          'precio.\n\nEsta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // El diálogo corre la eliminación (lenta: borra fotos/video en Storage)
+    // y se cierra solo al terminar.
+    final failed = await showDialog<List<String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DeletionProgressDialog(docs: selected),
+    );
+    if (!mounted) return;
+    _exitSelection();
+
+    final failedCount = failed?.length ?? 0;
+    final deleted = selected.length - failedCount;
+    if (failedCount == 0) {
+      SoftTheme.showSnack(
+        context,
+        'Se eliminaron $deleted producto(s)',
+        type: SnackType.success,
+      );
+    } else {
+      final skus = (failed ?? const <String>[]).take(3).join(', ');
+      SoftTheme.showSnack(
+        context,
+        'Se eliminaron $deleted, pero $failedCount fallaron '
+        '($skus${failedCount > 3 ? '…' : ''}). Inténtalo otra vez.',
+        type: SnackType.error,
+      );
+    }
   }
 
   bool _matches(QueryDocumentSnapshot doc) {
@@ -595,8 +656,8 @@ class _ProductTile extends StatelessWidget {
   }
 }
 
-/// Barra contextual del multiselección: contador, seleccionar todos y
-/// abrir la edición masiva. Vive encima de la lista, dentro del Scaffold.
+/// Barra contextual del multiselección: contador, seleccionar todos,
+/// editar o eliminar. Vive encima de la lista, dentro del Scaffold.
 class _SelectionBar extends StatelessWidget {
   const _SelectionBar({
     required this.count,
@@ -604,6 +665,7 @@ class _SelectionBar extends StatelessWidget {
     required this.onClose,
     required this.onToggleAll,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final int count;
@@ -611,6 +673,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onToggleAll;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -643,7 +706,89 @@ class _SelectionBar extends StatelessWidget {
             tooltip: 'Editar seleccionados',
             onPressed: count == 0 ? null : onEdit,
           ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Eliminar seleccionados',
+            color: SoftTheme.cRose,
+            onPressed: count == 0 ? null : onDelete,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Diálogo de progreso de la eliminación masiva. Borra primero las fotos y
+/// videos de Storage y luego el documento de cada producto; si un producto
+/// falla, se registra su SKU y se continúa con el resto. Se cierra solo.
+class _DeletionProgressDialog extends StatefulWidget {
+  const _DeletionProgressDialog({required this.docs});
+
+  final List<QueryDocumentSnapshot> docs;
+
+  @override
+  State<_DeletionProgressDialog> createState() =>
+      _DeletionProgressDialogState();
+}
+
+class _DeletionProgressDialogState extends State<_DeletionProgressDialog> {
+  final media = ProductMediaService();
+
+  int done = 0;
+  final failed = <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    for (final doc in widget.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      // Las URLs de Storage de este producto (fotos + video). Si alguna ya
+      // no existe, deleteByUrl lo ignora sin fallar.
+      final urls = [
+        ...(data['images'] as List?)?.whereType<String>() ?? const <String>[],
+        if ((data['videoUrl'] ?? '').toString().isNotEmpty)
+          data['videoUrl'].toString(),
+      ];
+      try {
+        await Future.wait(urls.map(media.deleteByUrl));
+        await doc.reference.delete();
+      } catch (_) {
+        failed.add(doc.id);
+      }
+      if (mounted) setState(() => done++);
+    }
+    if (mounted) Navigator.of(context).pop(failed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: const Text('Eliminando productos…'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LinearProgressIndicator(
+              value: done / widget.docs.length,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 12),
+            Text('$done de ${widget.docs.length} eliminados'),
+            if (failed.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${failed.length} han fallado hasta ahora',
+                style: const TextStyle(fontSize: 12, color: SoftTheme.cRose),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
