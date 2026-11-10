@@ -10,8 +10,11 @@ Actualizar solo en hitos importantes, no en cada conversación.
 - **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
   Flujo: `git add . && git commit -m "..." && git push`.
 - **Producción**: Functions (9) y reglas Firestore/Storage desplegadas; la web
-  todavía NO está publicada (Hosting sin releases). Faltan los secretos de
-  Functions (`functions/.env`): el webhook responde 401 y no salen correos.
+  todavía NO está publicada (Hosting sin releases). `WEBHOOK_SECRET` YA está
+  configurado en `functions/.env` y `webhookSku` desplegado con él (verificado:
+  401 sin secret, 200 con secret, actualización parcial intacta). Faltan
+  `RESEND_API_KEY`/`RESEND_FROM`: no salen correos de pedidos.
+  El secret solo vive en `functions/.env` (ignorado por git); nunca en chats.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
 - **Migración CELTOONS** (respaldo JSON del proyecto briges, tienda de celulares):
   280 productos importados a PRODUCCIÓN y al emulador con
@@ -103,9 +106,9 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Pendiente (priorizado)
 
-1. Configurar `functions/.env` (`WEBHOOK_SECRET`, `RESEND_API_KEY`,
-   `RESEND_FROM`) y redesplegar Functions: sin esos secretos el webhook responde
-   401 y no salen correos. Las reglas ya están desplegadas.
+1. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
+   redesplegar `onOrderCreated`: sin esos secretos no salen correos de
+   pedidos. (`WEBHOOK_SECRET` ya está hecho y verificado.)
 2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
 3. Tests de reglas/Functions, CI y proyecto `dev` separado.
 4. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
