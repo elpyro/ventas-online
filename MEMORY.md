@@ -96,9 +96,9 @@ Actualizar solo en hitos importantes, no en cada conversación.
   producto: media de Storage → doc de Firestore; fallas por SKU se
   reportan al final sin cortar el lote. Instalado y corriendo en el
   Redmi Note 9 Pro via adb (`flutter build apk` + `adb install -r`).
-- **Tile de catálogo**: sin lápiz ni edición directa (se edita con ⚙️ en la
-  AppBar de la pantalla de productos del catálogo); badge verde
-  "N productos" vía `count()` de Firestore (agregación en servidor).
+- **Tile de catálogo**: badge verde "N productos" vía `count()` de Firestore
+  (agregación en servidor). El lápiz de editar catálogo se mantiene en el
+  tile (se quitó una vez y se devolvió: el dueño lo usa como acceso directo).
 
 ## Flujo de compra (actual)
 
