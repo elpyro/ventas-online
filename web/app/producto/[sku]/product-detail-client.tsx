@@ -44,7 +44,7 @@ export default function ProductDetailClient({
   const [size, setSize] = useState<string>("");
   const [qty, setQty] = useState(1);
 
-  // Colores y tallas Ãºnicos disponibles en las variantes.
+  // Colores y tallas únicos disponibles en las variantes.
   const colors = useMemo(() => {
     const seen = new Map<string, string | undefined>();
     for (const v of variants) {
@@ -59,7 +59,7 @@ export default function ProductDetailClient({
     return [...set];
   }, [variants]);
 
-  // Variantes efectivas para la combinaciÃ³n elegida.
+  // Variantes efectivas para la combinación elegida.
   const filtered = useMemo(() => {
     return variants.filter((v) => {
       if (color && v.color !== color) return false;
@@ -68,7 +68,7 @@ export default function ProductDetailClient({
     });
   }, [variants, color, size]);
 
-  // Al cambiar el color, prioriza una talla que sÃ­ exista en ese color.
+  // Al cambiar el color, prioriza una talla que sí exista en ese color.
   useEffect(() => {
     if (!hasVariants) return;
     const compatible = variants.filter((v) => !color || v.color === color);
@@ -78,7 +78,7 @@ export default function ProductDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [color]);
 
-  // SelecciÃ³n por defecto: la primera variante con stock (o la primera).
+  // Selección por defecto: la primera variante con stock (o la primera).
   useEffect(() => {
     if (!hasVariants || color || size) return;
     const initial =
@@ -118,7 +118,7 @@ export default function ProductDetailClient({
   const effectiveStock = hasVariants ? variantStock : Number(product.stock ?? 0);
   const limit = Math.max(0, effectiveStock);
 
-  // Lo que ya estÃ¡ en el carrito para esta variante (o para el SKU simple).
+  // Lo que ya está en el carrito para esta variante (o para el SKU simple).
   const inCartQty = items
     .filter(
       (i) => cartKey(i.sku, i.variantId) === cartKey(product.sku, selectedVariant?.id)
@@ -159,7 +159,7 @@ export default function ProductDetailClient({
     }
     if (hasVariants && !selectedVariant) {
       toast({
-        title: "Elige una opciÃ³n",
+        title: "Elige una opción",
         description: "Selecciona color y talla antes de agregar.",
         variant: "destructive",
       });
@@ -175,8 +175,8 @@ export default function ProductDetailClient({
 
     toast({
       title: delta > 0 ? "Agregado al carrito" : "Carrito actualizado",
-      description: `${qty} Ã— ${product.name}${
-        selectedVariant ? ` Â· ${variantLabel(selectedVariant)}` : ""
+      description: `${qty} × ${product.name}${
+        selectedVariant ? ` · ${variantLabel(selectedVariant)}` : ""
       }`,
       variant: "success",
     });
@@ -206,7 +206,7 @@ export default function ProductDetailClient({
       </Link>
 
       <div className="mt-4 grid gap-8 lg:grid-cols-2">
-        {/* GalerÃ­a */}
+        {/* Galería */}
         <ProductGallery media={media} title={product.name} />
 
         {/* Compra */}
@@ -221,7 +221,7 @@ export default function ProductDetailClient({
               {product.name}
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              SKU: {product.sku} Â· {catalogTitle}
+              SKU: {product.sku} · {catalogTitle}
             </p>
           </div>
 
@@ -256,7 +256,7 @@ export default function ProductDetailClient({
                       disabled={!hasStock}
                       onClick={() => setColor(c.name)}
                       aria-pressed={isSelected}
-                      title={hasStock ? c.name : `${c.name} â€” sin stock`}
+                      title={hasStock ? c.name : `${c.name} — sin stock`}
                       className={cn(
                         "flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-all",
                         isSelected
@@ -321,7 +321,7 @@ export default function ProductDetailClient({
           {hasVariants && !selectedVariant && (
             <p className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <CircleAlert className="h-4 w-4 shrink-0" />
-              Esta combinaciÃ³n no estÃ¡ disponible. Elige otra opciÃ³n.
+              Esta combinación no está disponible. Elige otra opción.
             </p>
           )}
 
@@ -341,7 +341,7 @@ export default function ProductDetailClient({
                   className="h-12 w-12 text-lg font-semibold transition-colors hover:bg-muted disabled:opacity-40"
                   disabled={qty <= 1}
                 >
-                  âˆ’
+                  −
                 </button>
                 <input
                   id="qty"
@@ -356,7 +356,7 @@ export default function ProductDetailClient({
                   className="h-12 w-14 border-x text-center text-lg font-bold outline-none"
                 />
                 <button
-                  aria-label="MÃ¡s"
+                  aria-label="Más"
                   onClick={() => setQty(Math.min(limit, qty + 1))}
                   className="h-12 w-12 text-lg font-semibold transition-colors hover:bg-muted disabled:opacity-40"
                   disabled={limit === 0 || qty >= limit}
@@ -368,7 +368,7 @@ export default function ProductDetailClient({
                 {limit === 0
                   ? "Sin stock"
                   : `${limit} unidad(es) disponibles${
-                      inCartQty > 0 ? ` Â· ${inCartQty} en tu carrito` : ""
+                      inCartQty > 0 ? ` · ${inCartQty} en tu carrito` : ""
                     }`}
               </p>
             </div>
@@ -401,21 +401,21 @@ export default function ProductDetailClient({
 
           <p className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
             <Truck className="mt-0.5 h-4 w-4 shrink-0" />
-            Un asesor coordinarÃ¡ por WhatsApp la entrega y el pago una vez que confirmes el pedido.
+            Un asesor coordinará por WhatsApp la entrega y el pago una vez que confirmes el pedido.
           </p>
         </div>
       </div>
 
-      {/* DescripciÃ³n y especificaciones */}
+      {/* Descripción y especificaciones */}
       <div className="mt-10 grid gap-8 lg:grid-cols-3">
         <section className="lg:col-span-2">
           <h2 className="flex items-center gap-2 text-xl font-bold">
             <Package className="h-5 w-5" />
-            DescripciÃ³n
+            Descripción
           </h2>
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
             {product.description?.trim() ||
-              "El administrador aÃºn no agregÃ³ una descripciÃ³n para este producto."}
+              "El administrador aún no agregó una descripción para este producto."}
           </p>
 
           {product.specs && product.specs.length > 0 && (

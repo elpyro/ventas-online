@@ -64,7 +64,7 @@ export default function CatalogoClient({
         setProducts(sortProducts(list, "displayOrder"));
       } catch (e: unknown) {
         console.error(e);
-        setError("No se pudieron cargar los productos. Revisa la conexiÃ³n.");
+        setError("No se pudieron cargar los productos. Revisa la conexión.");
       } finally {
         setLoading(false);
       }
@@ -86,7 +86,7 @@ export default function CatalogoClient({
     const stock = productStock(p);
     if (inCart >= stock) {
       toast({
-        title: "No hay mÃ¡s stock disponible",
+        title: "No hay más stock disponible",
         description: `${p.name}: ya agregaste las ${stock} unidades disponibles.`,
         variant: "destructive",
       });
@@ -95,7 +95,7 @@ export default function CatalogoClient({
     addItem(p, id);
     toast({
       title: "Agregado al carrito",
-      description: `${p.name} Â· ${cop.format(p.price)}`,
+      description: `${p.name} · ${cop.format(p.price)}`,
       variant: "success",
     });
   }
@@ -104,7 +104,7 @@ export default function CatalogoClient({
     return (
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 px-4 py-24 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin" />
-        <p>Cargando catÃ¡logoâ€¦</p>
+        <p>Cargando catálogo…</p>
       </div>
     );
   }
@@ -124,7 +124,7 @@ export default function CatalogoClient({
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">{catalogTitle ?? "CatÃ¡logo"}</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">{catalogTitle ?? "Catálogo"}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {filtered.length}{" "}
             {filtered.length === 1 ? "producto" : "productos"}
@@ -132,11 +132,11 @@ export default function CatalogoClient({
           </p>
         </div>
 
-        {/* Buscador + orden: en mÃ³vil van apilados, en escritorio en fila */}
+        {/* Buscador + orden: en móvil van apilados, en escritorio en fila */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative w-full flex-1">
             <label className="sr-only" htmlFor="catalog-search">
-              Buscar en el catÃ¡logo
+              Buscar en el catálogo
             </label>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -144,14 +144,14 @@ export default function CatalogoClient({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto, marca o SKUâ€¦"
+              placeholder="Buscar producto, marca o SKU…"
               className="h-11 w-full rounded-xl border bg-white pl-10 pr-10 text-sm shadow-sm outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                aria-label="Borrar bÃºsqueda"
+                aria-label="Borrar búsqueda"
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -175,7 +175,7 @@ export default function CatalogoClient({
                 </option>
               ))}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">â–¾</span>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
         </div>
       </div>
@@ -185,12 +185,12 @@ export default function CatalogoClient({
           <PackageOpen className="h-10 w-10" />
           <p className="font-medium">
             {search.trim()
-              ? `NingÃºn producto coincide con â€œ${search.trim()}â€.`
-              : "Este catÃ¡logo no tiene productos todavÃ­a."}
+              ? `Ningún producto coincide con “${search.trim()}”.`
+              : "Este catálogo no tiene productos todavía."}
           </p>
           {search.trim() && (
             <Button variant="outline" onClick={() => setSearch("")}>
-              Borrar bÃºsqueda
+              Borrar búsqueda
             </Button>
           )}
         </div>
@@ -293,7 +293,7 @@ export default function CatalogoClient({
                       {!available
                         ? "Agotado"
                         : limitReached
-                          ? "MÃ¡x. en carrito"
+                          ? "Máx. en carrito"
                           : "Agregar"}
                     </Button>
                   )}

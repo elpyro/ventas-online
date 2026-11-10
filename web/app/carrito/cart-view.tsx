@@ -45,13 +45,13 @@ export default function CartView({
           <div className="rounded-full bg-muted p-4">
             <ShoppingBasket className="h-10 w-10 text-muted-foreground" />
           </div>
-          <h1 className="text-2xl font-bold">Tu carrito estÃ¡ vacÃ­o</h1>
+          <h1 className="text-2xl font-bold">Tu carrito está vacío</h1>
           <p className="text-sm text-muted-foreground">
-            Navega los catÃ¡logos y agrega productos; el mÃ­nimo global es $
+            Navega los catálogos y agrega productos; el mínimo global es $
             {globalMinOrder.toFixed(2)}.
           </p>
           <Button size="lg" onClick={() => router.push("/catalogos")}>
-            Explorar catÃ¡logos
+            Explorar catálogos
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
@@ -67,7 +67,7 @@ export default function CartView({
         <div>
           <h1 className="text-2xl font-bold">Carrito</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {items.length} {items.length === 1 ? "producto" : "productos"} Â·{" "}
+            {items.length} {items.length === 1 ? "producto" : "productos"} ·{" "}
             {items.reduce((s, i) => s + i.quantity, 0)} unidades
           </p>
         </div>
@@ -163,10 +163,10 @@ export default function CartView({
                 href="/catalogos"
                 className="block text-center text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
-                â† Seguir comprando
+                ← Seguir comprando
               </Link>
               <p className="flex items-center justify-center gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
-                <Truck className="h-4 w-4" /> ConfirmaciÃ³n y coordinaciÃ³n por WhatsApp
+                <Truck className="h-4 w-4" /> Confirmación y coordinación por WhatsApp
               </p>
             </CardContent>
           </Card>

@@ -13,8 +13,8 @@ const cop = new Intl.NumberFormat("es-CO", {
 });
 
 /**
- * Muestra el progreso hacia los mÃ­nimos de compra (global y por catÃ¡logo).
- * Verde cuando todo estÃ¡ cubierto; Ã¡mbar con barra de progreso cuando falta.
+ * Muestra el progreso hacia los mínimos de compra (global y por catálogo).
+ * Verde cuando todo está cubierto; ámbar con barra de progreso cuando falta.
  */
 export function MinimumOrderHint({ lines }: { lines: MinimumLine[] }) {
   const relevant = lines.filter((l) => l.min > 0);
@@ -26,7 +26,7 @@ export function MinimumOrderHint({ lines }: { lines: MinimumLine[] }) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
         <CheckCircle2 className="h-4 w-4 shrink-0" />
-        Pedido mÃ­nimo cumplido â€” puedes confirmar tu compra.
+        Pedido mínimo cumplido — puedes confirmar tu compra.
       </div>
     );
   }
@@ -35,7 +35,7 @@ export function MinimumOrderHint({ lines }: { lines: MinimumLine[] }) {
     <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
       <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
         <CircleAlert className="h-4 w-4 shrink-0" />
-        Falta llegar al mÃ­nimo
+        Falta llegar al mínimo
       </p>
       {missing.map((line) => {
         const pct = Math.min(100, Math.round((line.current / line.min) * 100));
