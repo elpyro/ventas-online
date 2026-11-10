@@ -169,6 +169,7 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
                                     color: SoftTheme.textMuted,
                                     size: 11,
                                   ),
+                                  _ProductCount(catalogId: d.id),
                                   SoftBadge(
                                     text:
                                         'Mín. ${_cop(data['minOrderSubtotal'] as num?)}',
@@ -195,16 +196,6 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'Editar catálogo',
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CatalogEditScreen(id: d.id, data: data),
-                            ),
-                          ),
-                        ),
                         const Icon(Icons.chevron_right,
                             size: 20, color: SoftTheme.textMuted),
                       ],
@@ -216,6 +207,48 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Badge con la cantidad de productos del catálogo. Usa la agregación
+/// count() de Firestore: cuenta en el servidor sin traer los documentos.
+class _ProductCount extends StatefulWidget {
+  const _ProductCount({required this.catalogId});
+
+  final String catalogId;
+
+  @override
+  State<_ProductCount> createState() => _ProductCountState();
+}
+
+class _ProductCountState extends State<_ProductCount> {
+  late final Future<int> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = FirebaseFirestore.instance
+        .collection('products')
+        .where('catalogIds', arrayContains: widget.catalogId)
+        .count()
+        .get()
+        .then((snap) => snap.count ?? 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int>(
+      future: _future,
+      builder: (context, snap) {
+        final n = snap.data;
+        return SoftBadge(
+          text: n == null ? '…' : (n == 1 ? '1 producto' : '$n productos'),
+          color: SoftTheme.cEmerald,
+          icon: Icons.inventory_2,
+          size: 11,
+        );
+      },
     );
   }
 }

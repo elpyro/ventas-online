@@ -4,7 +4,7 @@ import '../theme/soft_theme.dart';
 
 /// Producto elegido para edición masiva: SKU + datos actuales. Los datos se
 /// usan solo para calcular campos derivados (p. ej. el listado final de
-/// catálogos) sin pisar el resto del documento.
+/// catálogos o el merge de etiquetas) sin pisar el resto del documento.
 class BulkEditProduct {
   const BulkEditProduct({
     required this.sku,
@@ -40,11 +40,86 @@ class BulkEditScreen extends StatefulWidget {
   State<BulkEditScreen> createState() => _BulkEditScreenState();
 }
 
+/// Fila de especificación para la edición masiva.
+class _BulkSpecRow {
+  _BulkSpecRow({String label = '', String value = ''})
+      : labelCtrl = TextEditingController(text: label),
+        valueCtrl = TextEditingController(text: value);
+
+  final TextEditingController labelCtrl;
+  final TextEditingController valueCtrl;
+
+  void dispose() {
+    labelCtrl.dispose();
+    valueCtrl.dispose();
+  }
+}
+
+/// Valores ya validados del formulario. null / vacío = "no tocar".
+class _BulkInput {
+  const _BulkInput({
+    required this.price,
+    required this.stock,
+    required this.priority,
+    required this.brand,
+    required this.available,
+    required this.featured,
+    required this.tags,
+    required this.replaceTags,
+    required this.seoTitle,
+    required this.seoDescription,
+    required this.specs,
+    required this.catalogsToAdd,
+    required this.catalogsToRemove,
+  });
+
+  final double? price;
+  final int? stock;
+  final int? priority;
+  final String brand;
+  final _TriState available;
+  final _TriState featured;
+
+  /// Etiquetas parseadas; null = no tocar. [replaceTags] decide si se
+  /// reemplazan las actuales o se agregan sin duplicar.
+  final List<String>? tags;
+  final bool replaceTags;
+  final String seoTitle;
+  final String seoDescription;
+
+  /// Especificaciones nuevas; se fusionan por nombre de campo con las
+  /// existentes de cada producto. null = no tocar.
+  final List<Map<String, dynamic>>? specs;
+  final Set<String> catalogsToAdd;
+  final Set<String> catalogsToRemove;
+
+  bool get touchesCatalogs =>
+      catalogsToAdd.isNotEmpty || catalogsToRemove.isNotEmpty;
+  bool get touchesState =>
+      available != _TriState.unchanged || featured != _TriState.unchanged;
+  bool get touchesNothing =>
+      price == null &&
+      stock == null &&
+      priority == null &&
+      brand.isEmpty &&
+      !touchesState &&
+      !touchesCatalogs &&
+      tags == null &&
+      seoTitle.isEmpty &&
+      seoDescription.isEmpty &&
+      (specs == null || specs!.isEmpty);
+}
+
 class _BulkEditScreenState extends State<BulkEditScreen> {
   final priceCtrl = TextEditingController();
   final stockCtrl = TextEditingController();
   final brandCtrl = TextEditingController();
   final priorityCtrl = TextEditingController();
+  final tagsCtrl = TextEditingController();
+  final seoTitleCtrl = TextEditingController();
+  final seoDescriptionCtrl = TextEditingController();
+
+  final List<_BulkSpecRow> specRows = [];
 
   _TriState available = _TriState.unchanged;
   _TriState featured = _TriState.unchanged;
@@ -52,6 +127,9 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
   /// Catálogos a agregar/quitar para TODOS los seleccionados.
   final Set<String> catalogsToAdd = {};
   final Set<String> catalogsToRemove = {};
+
+  /// false = las etiquetas se agregan a las existentes; true = se reemplazan.
+  bool replaceTags = false;
 
   bool saving = false;
   String? error;
@@ -62,6 +140,12 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
     stockCtrl.dispose();
     brandCtrl.dispose();
     priorityCtrl.dispose();
+    tagsCtrl.dispose();
+    seoTitleCtrl.dispose();
+    seoDescriptionCtrl.dispose();
+    for (final row in specRows) {
+      row.dispose();
+    }
     super.dispose();
   }
 
@@ -106,30 +190,64 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
         return;
       }
     }
-    final brand = brandCtrl.text.trim();
-    final touchesCatalogs =
-        catalogsToAdd.isNotEmpty || catalogsToRemove.isNotEmpty;
-    final touchesState =
-        available != _TriState.unchanged || featured != _TriState.unchanged;
 
-    if (price == null &&
-        stock == null &&
-        priority == null &&
-        brand.isEmpty &&
-        !touchesCatalogs &&
-        !touchesState) {
+    // Etiquetas: texto escrito pero sin nada útil = error del usuario.
+    List<String>? tags;
+    final tagsText = tagsCtrl.text.trim();
+    if (tagsText.isNotEmpty) {
+      tags = tagsText
+          .split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
+      if (tags.isEmpty) {
+        _showError('Ingresa etiquetas válidas (texto separado por comas).');
+        return;
+      }
+    }
+
+    // Especificaciones: fila a medias = error; fila vacía se ignora.
+    List<Map<String, dynamic>>? specs;
+    if (specRows.any((r) =>
+        r.labelCtrl.text.trim().isNotEmpty ||
+        r.valueCtrl.text.trim().isNotEmpty)) {
+      specs = [];
+      for (var i = 0; i < specRows.length; i++) {
+        final label = specRows[i].labelCtrl.text.trim();
+        final value = specRows[i].valueCtrl.text.trim();
+        if (label.isEmpty && value.isEmpty) continue;
+        if (label.isEmpty || value.isEmpty) {
+          _showError(
+              'La especificación ${i + 1} necesita el campo y el valor.');
+          return;
+        }
+        specs.add({'label': label, 'value': value});
+      }
+    }
+
+    final input = _BulkInput(
+      price: price,
+      stock: stock,
+      priority: priority,
+      brand: brandCtrl.text.trim(),
+      available: available,
+      featured: featured,
+      tags: tags,
+      replaceTags: replaceTags,
+      seoTitle: seoTitleCtrl.text.trim(),
+      seoDescription: seoDescriptionCtrl.text.trim(),
+      specs: specs,
+      catalogsToAdd: catalogsToAdd,
+      catalogsToRemove: catalogsToRemove,
+    );
+
+    if (input.touchesNothing) {
       _showError('Cambia al menos un campo para editar los productos.');
       return;
     }
 
-    final plan = _buildUpdates(
-      price: price,
-      stock: stock,
-      priority: priority,
-      brand: brand,
-      touchesCatalogs: touchesCatalogs,
-      touchesState: touchesState,
-    );
+    final plan = _buildUpdates(input);
 
     if (plan.updatesBySku.isEmpty) {
       _showError(
@@ -164,49 +282,81 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
 
   /// Cambios que se aplicarán a cada producto. Campos vacíos o "Sin cambiar"
   /// simplemente no entran en el mapa: Firestore solo recibe lo editado.
-  _BulkPlan _buildUpdates({
-    required double? price,
-    required int? stock,
-    required int? priority,
-    required String brand,
-    required bool touchesCatalogs,
-    required bool touchesState,
-  }) {
+  _BulkPlan _buildUpdates(_BulkInput input) {
     final updatesBySku = <String, Map<String, dynamic>>{};
     var skippedByVariants = 0;
     var skippedByCatalogs = 0;
 
     for (final p in widget.products) {
       final updates = <String, dynamic>{};
-      if (price != null) updates['price'] = price;
+      if (input.price != null) updates['price'] = input.price;
 
       // El stock de un producto con variantes se recalcula desde ellas:
       // pisarlo aquí sería mentirle al inventario. Se omite y se avisa.
-      if (stock != null) {
+      if (input.stock != null) {
         final variants = (p.data['variants'] as List?) ?? const [];
         if (variants.isNotEmpty) {
           skippedByVariants++;
         } else {
-          updates['stock'] = stock;
+          updates['stock'] = input.stock;
         }
       }
 
-      if (priority != null) updates['priority'] = priority;
-      if (brand.isNotEmpty) updates['brand'] = brand;
-      if (available != _TriState.unchanged) {
-        updates['isAvailable'] = available == _TriState.yes;
+      if (input.priority != null) updates['priority'] = input.priority;
+      if (input.brand.isNotEmpty) updates['brand'] = input.brand;
+      if (input.available != _TriState.unchanged) {
+        updates['isAvailable'] = input.available == _TriState.yes;
       }
-      if (featured != _TriState.unchanged) {
-        updates['featured'] = featured == _TriState.yes;
+      if (input.featured != _TriState.unchanged) {
+        updates['featured'] = input.featured == _TriState.yes;
       }
 
-      if (touchesCatalogs) {
+      if (input.tags != null) {
+        if (input.replaceTags) {
+          updates['tags'] = input.tags;
+        } else {
+          final current =
+              (p.data['tags'] as List?)?.map((e) => e.toString()).toSet() ??
+                  <String>{};
+          updates['tags'] = [...current, ...input.tags!];
+        }
+      }
+      if (input.seoTitle.isNotEmpty) updates['seoTitle'] = input.seoTitle;
+      if (input.seoDescription.isNotEmpty) {
+        updates['seoDescription'] = input.seoDescription;
+      }
+
+      if (input.specs != null && input.specs!.isNotEmpty) {
+        // Merge por nombre de campo: si el producto ya tiene ese campo se
+        // actualiza su valor; si no, se añade al final. Nunca se borran las
+        // especificaciones existentes.
+        final current = (p.data['specs'] as List?) ?? const [];
+        final merged = <Map<String, dynamic>>[
+          for (final raw in current)
+            if (raw is Map)
+              {
+                'label': raw['label']?.toString() ?? '',
+                'value': raw['value']?.toString() ?? '',
+              },
+        ];
+        for (final s in input.specs!) {
+          final idx = merged.indexWhere((m) => m['label'] == s['label']);
+          if (idx >= 0) {
+            merged[idx] = s;
+          } else {
+            merged.add(s);
+          }
+        }
+        updates['specs'] = merged;
+      }
+
+      if (input.touchesCatalogs) {
         final current = (p.data['catalogIds'] as List?)
                 ?.map((e) => e.toString())
                 .toList() ??
             const <String>[];
-        final merged = {...current, ...catalogsToAdd}
-          ..removeAll(catalogsToRemove);
+        final merged = {...current, ...input.catalogsToAdd}
+          ..removeAll(input.catalogsToRemove);
         // Un producto sin catálogos no se muestra en la web: si estos cambios
         // lo dejarían vacío, se omite entero y se reporta.
         if (merged.isEmpty) {
@@ -226,25 +376,25 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
       updatesBySku: updatesBySku,
       skippedByVariants: skippedByVariants,
       skippedByCatalogs: skippedByCatalogs,
-      price: price,
-      stock: stock,
-      priority: priority,
-      brand: brand,
-      touchesCatalogs: touchesCatalogs,
-      touchesState: touchesState,
+      fields: [
+        if (input.price != null) 'precio',
+        if (input.stock != null) 'stock',
+        if (input.priority != null) 'orden visible',
+        if (input.brand.isNotEmpty) 'marca',
+        if (input.available != _TriState.unchanged) 'disponible',
+        if (input.featured != _TriState.unchanged) 'destacado',
+        if (input.touchesCatalogs) 'catálogos',
+        if (input.tags != null)
+          input.replaceTags ? 'etiquetas (reemplazar)' : 'etiquetas (agregar)',
+        if (input.seoTitle.isNotEmpty) 'título SEO',
+        if (input.seoDescription.isNotEmpty) 'descripción SEO',
+        if (input.specs != null && input.specs!.isNotEmpty)
+          'especificaciones (${input.specs!.length})',
+      ],
     );
   }
 
   Future<bool?> _confirmDialog(_BulkPlan plan) {
-    final fields = <String>[
-      if (plan.price != null) 'precio',
-      if (plan.stock != null) 'stock',
-      if (plan.priority != null) 'orden visible',
-      if (plan.brand.isNotEmpty) 'marca',
-      if (available != _TriState.unchanged) 'disponible',
-      if (featured != _TriState.unchanged) 'destacado',
-      if (plan.touchesCatalogs) 'catálogos',
-    ];
     final notes = <String>[
       if (plan.skippedByVariants > 0)
         '${plan.skippedByVariants} producto(s) tienen variantes y conservan su stock (se calcula por variante).',
@@ -262,7 +412,7 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
             Text(
                 'Se actualizarán ${plan.updatesBySku.length} de ${widget.products.length} productos.'),
             const SizedBox(height: 8),
-            Text('Campos: ${fields.join(', ')}.'),
+            Text('Campos: ${plan.fields.join(', ')}.'),
             for (final n in notes) ...[
               const SizedBox(height: 8),
               Text(n,
@@ -388,6 +538,75 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
                   onChanged: () => setState(() {}),
                 ),
                 const SizedBox(height: 28),
+                const _SectionTitle('Búsqueda y SEO'),
+                TextField(
+                  controller: tagsCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Etiquetas',
+                    helperText:
+                        'Separadas por coma. Vacío = no cambiar. Ej: audífonos, bluetooth',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Agregar a las existentes'),
+                      selected: !replaceTags,
+                      onSelected: saving
+                          ? null
+                          : (_) => setState(() => replaceTags = false),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: const Text('Reemplazar todas'),
+                      selected: replaceTags,
+                      onSelected: saving
+                          ? null
+                          : (_) => setState(() => replaceTags = true),
+                    ),
+                  ],
+                ),
+                TextField(
+                  controller: seoTitleCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Título SEO',
+                    helperText: 'Vacío = no cambiar',
+                  ),
+                ),
+                TextField(
+                  controller: seoDescriptionCtrl,
+                  enabled: !saving,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción SEO',
+                    helperText: 'Vacío = no cambiar',
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const _SectionTitle('Especificaciones (para todos)'),
+                const Text(
+                  'Se añaden o actualizan por nombre de campo en cada producto; las que ya existen no se borran.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                for (var i = 0; i < specRows.length; i++)
+                  _SpecCard(
+                    row: specRows[i],
+                    enabled: !saving,
+                    onDelete: () =>
+                        setState(() => specRows.removeAt(i).dispose()),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: saving
+                      ? null
+                      : () => setState(() => specRows.add(_BulkSpecRow())),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar especificación'),
+                ),
+                const SizedBox(height: 28),
                 const Text(
                   'Los campos que dejes vacíos o en "Sin cambiar" se quedan como están.',
                   style: TextStyle(fontSize: 12, color: SoftTheme.textMuted),
@@ -423,23 +642,15 @@ class _BulkPlan {
     required this.updatesBySku,
     required this.skippedByVariants,
     required this.skippedByCatalogs,
-    required this.price,
-    required this.stock,
-    required this.priority,
-    required this.brand,
-    required this.touchesCatalogs,
-    required this.touchesState,
+    required this.fields,
   });
 
   final Map<String, Map<String, dynamic>> updatesBySku;
   final int skippedByVariants;
   final int skippedByCatalogs;
-  final double? price;
-  final int? stock;
-  final int? priority;
-  final String brand;
-  final bool touchesCatalogs;
-  final bool touchesState;
+
+  /// Nombres legibles de los campos que se van a tocar (para confirmar).
+  final List<String> fields;
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -643,5 +854,54 @@ class _CatalogPickers extends StatelessWidget {
   String _catalogTitle(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return data['title']?.toString() ?? doc.id;
+  }
+}
+
+/// Tarjeta de una especificación de la edición masiva.
+class _SpecCard extends StatelessWidget {
+  const _SpecCard({
+    required this.row,
+    required this.enabled,
+    required this.onDelete,
+  });
+
+  final _BulkSpecRow row;
+  final bool enabled;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: row.labelCtrl,
+                enabled: enabled,
+                decoration: const InputDecoration(labelText: 'Campo'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: row.valueCtrl,
+                enabled: enabled,
+                decoration: const InputDecoration(labelText: 'Valor'),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: 'Quitar',
+              onPressed: enabled ? onDelete : null,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
