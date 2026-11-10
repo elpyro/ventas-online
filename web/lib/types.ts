@@ -193,6 +193,11 @@ export interface StoreConfig {
     title?: string;
     description?: string;
   } | string>;
+  /** Preguntas frecuentes editables desde el APK (Apariencia). */
+  faqs?: Array<{
+    question: string;
+    answer: string;
+  }>;
   ogImage?: string;
   instagram?: string;
   facebook?: string;

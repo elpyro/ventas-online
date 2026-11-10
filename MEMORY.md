@@ -1,6 +1,6 @@
 ﻿# Memoria del proyecto — Ventas Online
 
-Última actualización: 2026-11-06
+Última actualización: 2026-11-10
 Estado cambiante. Las reglas estables viven en `AGENTS.md`.
 Actualizar solo en hitos importantes, no en cada conversación.
 
@@ -9,7 +9,9 @@ Actualizar solo en hitos importantes, no en cada conversación.
 - Proyecto Firebase: `ventas-online-ec`. CLI fijado con `firebase use ventas-online-ec`.
 - **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
   Flujo: `git add . && git commit -m "..." && git push`.
-- **Producción intacta**: Functions y reglas nuevas no están desplegadas.
+- **Producción**: Functions (9) y reglas Firestore/Storage desplegadas; la web
+  todavía NO está publicada (Hosting sin releases). Faltan los secretos de
+  Functions (`functions/.env`): el webhook responde 401 y no salen correos.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
 - Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
 - Web de emulador en http://localhost:3002 (`next dev`, `NEXT_PUBLIC_USE_EMULATORS=true`).
@@ -49,9 +51,14 @@ Actualizar solo en hitos importantes, no en cada conversación.
   `orders_screen.dart` y `order_detail_screen.dart`.
 - **Config dividida** (APK): `config_screen.dart` conserva solo datos de la
   tienda + dos tarjetas. `store_appearance_screen.dart` agrupa enunciado, badges,
-  colores y banners; `store_seo_screen.dart` agrupa SEO, imagen OG, llms.txt,
-  redes sociales y clave Gemini. Cada una carga y guarda lo suyo (no se pisan).
+  preguntas frecuentes, colores y banners; `store_seo_screen.dart` agrupa SEO,
+  imagen OG, llms.txt, redes sociales y clave Gemini. Cada una carga y guarda lo
+  suyo (no se pisan).
   Bloque reutilizable `widgets/soft_section.dart` (`SoftSection`, `softField`).
+- **Preguntas frecuentes**: se agregan, editan y eliminan desde el APK
+  (Apariencia) en `store_config/general.faqs` (`[{question, answer}]`). La web
+  las lee con respaldo a las 5 de siempre y genera el JSON-LD `FAQPage`; si el
+  array existe pero está vacío, la sección no se muestra.
 - Fix miniaturas estiradas: `SoftThumbnail` limita solo `cacheWidth` (antes
   `cacheWidth` + `cacheHeight` deformaban fotos no cuadradas).
 - FAB "Nuevo producto" con estilo 3D suave en `catalog_products_screen.dart`.
@@ -60,7 +67,7 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 1. Agregar productos → panel o `/carrito`.
 2. Checkout: opcionalmente precargado desde el navegador.
-3. `createOrder` valida y crea pedido (fallback `addDoc` si Functions no existe).
+3. `createOrder` valida y crea pedido (las reglas rechazan `addDoc` directo).
 4. Pantalla de **éxito**: ID del pedido + botones opcionales:
    - **Enviar por WhatsApp** (no automático)
    - **Ver mis pedidos** (consulta por `orderId` + teléfono)
@@ -68,14 +75,15 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Pendiente (priorizado)
 
-1. Desplegar Functions (`functions/.env` con `WEBHOOK_SECRET` real) + reglas
-   Firestore/Storage actualizadas (ojo: `orders.create` debe ser solo vía Function).
-2. Eliminar fallback `addDoc` en checkout cuando `createOrder` esté en prod.
-3. Tests de reglas, CI y proyecto `dev` separado.
-4. Pantalla de pedidos en APK admin (ya llega push FCM).
+1. Configurar `functions/.env` (`WEBHOOK_SECRET`, `RESEND_API_KEY`,
+   `RESEND_FROM`) y redesplegar Functions: sin esos secretos el webhook responde
+   401 y no salen correos. Las reglas ya están desplegadas.
+2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
+3. Tests de reglas/Functions, CI y proyecto `dev` separado.
+4. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
 5. Reemplazar datos demo por datos reales.
 6. Probar la subida de fotos/video desde el APK contra los emuladores
-   (el APK actual apunta a producción; falta un interruptor de emulador).
+   (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).
 7. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
 
 ## Decisiones
@@ -102,4 +110,5 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Próximo paso
 
-Antes de producción: completar config SEO/redes en admin, desplegar Functions y reglas, y fijar `NEXT_PUBLIC_SITE_URL`. Después desplegar la web.
+Antes de producción: configurar `functions/.env`, limpiar datos demo, publicar la
+web con `NEXT_PUBLIC_SITE_URL` real y firmar el APK.

@@ -36,6 +36,9 @@ Todas las fechas de escritura usan `serverTimestamp()` o `new Date()` en Functio
 | `banners[].imageUrl` | string | sí | URL de la imagen |
 | `banners[].redirectUrl` | string | no | Ruta al hacer clic |
 | `banners[].isActive` | boolean | sí | Si se muestra |
+| `faqs` | array | no | Preguntas frecuentes de la home (editables desde el APK → Apariencia) |
+| `faqs[].question` | string | sí | Texto de la pregunta |
+| `faqs[].answer` | string | sí | Respuesta que se muestra debajo |
 | `updatedAt` | timestamp | sí | Última escritura |
 
 ```json
@@ -50,6 +53,12 @@ Todas las fechas de escritura usan `serverTimestamp()` o `new Date()` en Functio
       "imageUrl": "https://picsum.photos/seed/ventas-online/1200/300",
       "redirectUrl": "/catalogos",
       "isActive": true
+    }
+  ],
+  "faqs": [
+    {
+      "question": "¿Cómo compro?",
+      "answer": "Elige un catálogo, agrega productos al carrito y completa el checkout con tus datos."
     }
   ],
   "updatedAt": "<timestamp>"

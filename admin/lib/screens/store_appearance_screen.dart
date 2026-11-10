@@ -13,8 +13,15 @@ class _HeroBadgeField {
   final TextEditingController description;
 }
 
+/// Campos editables de una pregunta frecuente (pregunta + respuesta).
+class _FaqField {
+  _FaqField({required this.question, required this.answer});
+  final TextEditingController question;
+  final TextEditingController answer;
+}
+
 /// Apariencia visual de la web: enunciado de la home, badges del hero,
-/// colores del tema y banners.
+/// preguntas frecuentes, colores del tema y banners.
 ///
 /// Pantalla independiente: carga y guarda sus propios campos para que la
 /// pantalla principal de Config quede corta y sin riesgo de pisar datos.
@@ -28,12 +35,17 @@ class StoreAppearanceScreen extends StatefulWidget {
 class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
   final sloganCtrl = TextEditingController();
   final List<_HeroBadgeField> heroBadges = [];
+  final List<_FaqField> faqs = [];
   final List<Map<String, dynamic>> banners = [];
   final _media = ProductMediaService();
 
   bool loaded = false;
   bool saving = false;
   bool savingBanners = false;
+  /// Si `faqs` ya existía en Firestore, guardar una lista vacía sí borra las
+  /// preguntas. Si no existía, no escribimos el campo para no ocultar las de
+  /// ejemplo de la web.
+  bool hadFaqsField = false;
 
   Color _primary = const Color(0xFF10B981);
   Color _primaryDark = const Color(0xFF047857);
@@ -55,6 +67,10 @@ class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
     for (final b in heroBadges) {
       b.text.dispose();
       b.description.dispose();
+    }
+    for (final f in faqs) {
+      f.question.dispose();
+      f.answer.dispose();
     }
     super.dispose();
   }
@@ -96,6 +112,23 @@ class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
           text: TextEditingController(), description: TextEditingController()));
     }
 
+    // Se aceptan varias formas por compatibilidad: {question, answer},
+    // {q, a} o {title, description} (como los badges).
+    hadFaqsField = data.containsKey('faqs');
+    final faqRaw = (data['faqs'] as List?) ?? const [];
+    faqs.clear();
+    for (final f in faqRaw) {
+      if (f is Map) {
+        faqs.add(_FaqField(
+          question: TextEditingController(
+              text: (f['question'] ?? f['q'] ?? f['title'] ?? '').toString()),
+          answer: TextEditingController(
+              text: (f['answer'] ?? f['a'] ?? f['description'] ?? '')
+                  .toString()),
+        ));
+      }
+    }
+
     final rawBanners = (data['banners'] as List?) ?? const [];
     banners.clear();
     for (final b in rawBanners) {
@@ -105,12 +138,24 @@ class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
   }
 
   Future<void> _save() async {
+    // Una fila a medio llenar se perdería al guardar; avisamos antes.
+    final incomplete = faqs.any((f) {
+      final q = f.question.text.trim();
+      final a = f.answer.text.trim();
+      return q.isEmpty != a.isEmpty;
+    });
+    if (incomplete) {
+      SoftTheme.showSnack(
+        context,
+        'Cada pregunta necesita su respuesta. Complétala o elimina la fila.',
+        type: SnackType.error,
+      );
+      return;
+    }
+
     setState(() => saving = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('store_config')
-          .doc('general')
-          .set({
+      final payload = <String, dynamic>{
         'slogan': sloganCtrl.text.trim(),
         'heroBadges': heroBadges
             .where((b) => b.text.text.trim().isNotEmpty)
@@ -126,7 +171,23 @@ class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
         'themeSurface': _toHex(_surface),
         'themeText': _toHex(_text),
         'themeTextMuted': _toHex(_textMuted),
-      }, SetOptions(merge: true));
+      };
+      // Si nunca hubo FAQ y el admin no agregó ninguna, no escribimos el campo:
+      // la web sigue mostrando las preguntas de ejemplo.
+      if (hadFaqsField || faqs.any((f) => f.question.text.trim().isNotEmpty)) {
+        payload['faqs'] = faqs
+            .where((f) => f.question.text.trim().isNotEmpty)
+            .map((f) => {
+                  'question': f.question.text.trim(),
+                  'answer': f.answer.text.trim(),
+                })
+            .toList();
+      }
+      await FirebaseFirestore.instance
+          .collection('store_config')
+          .doc('general')
+          .set(payload, SetOptions(merge: true));
+      hadFaqsField = payload.containsKey('faqs');
       if (mounted) {
         SoftTheme.showSnack(context, 'Apariencia guardada',
             type: SnackType.success);
@@ -616,6 +677,84 @@ class _StoreAppearanceScreenState extends State<StoreAppearanceScreen> {
                                   heroBadges.add(_HeroBadgeField(
                                       text: TextEditingController(),
                                       description: TextEditingController()));
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      SoftSection(
+                        title: 'Preguntas frecuentes',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Se muestran al final de la home y ayudan al SEO: Google puede destacarlas en los resultados.',
+                              style: TextStyle(
+                                  fontSize: 12, color: SoftTheme.textMuted),
+                            ),
+                            const SizedBox(height: 8),
+                            if (faqs.isEmpty)
+                              const Text(
+                                'Sin preguntas. Agrega la primera abajo.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            for (var i = 0; i < faqs.length; i++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          TextField(
+                                            controller: faqs[i].question,
+                                            decoration: softField(
+                                              'Pregunta ${i + 1}',
+                                              helperText:
+                                                  'Ej: ¿Hacen envíos a todo el país?',
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextField(
+                                            controller: faqs[i].answer,
+                                            minLines: 2,
+                                            maxLines: 4,
+                                            decoration: softField(
+                                              'Respuesta',
+                                              helperText:
+                                                  'Responde claro y breve; es lo que verá el cliente.',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                      tooltip: 'Quitar pregunta',
+                                      onPressed: () {
+                                        setState(() {
+                                          faqs[i].question.dispose();
+                                          faqs[i].answer.dispose();
+                                          faqs.removeAt(i);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 4),
+                            SoftTheme.softButton(
+                              label: 'Agregar pregunta',
+                              icon: Icons.add,
+                              primary: false,
+                              onPressed: () {
+                                setState(() {
+                                  faqs.add(_FaqField(
+                                      question: TextEditingController(),
+                                      answer: TextEditingController()));
                                 });
                               },
                             ),

@@ -6,6 +6,23 @@ import { HomeSearch } from "@/components/home-search";
 import { BannerCarousel } from "@/components/banner-carousel";
 import { HeroBadges } from "@/components/hero-badges";
 
+type Faq = { q: string; a: string };
+
+/** Normaliza las FAQ guardadas desde el APK; ignora filas incompletas. */
+function normalizeFaqs(raw: unknown): Faq[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return { q: "", a: "" };
+      const m = item as Record<string, unknown>;
+      return {
+        q: String(m.question ?? m.q ?? "").trim(),
+        a: String(m.answer ?? m.a ?? "").trim(),
+      };
+    })
+    .filter((f) => f.q.length > 0 && f.a.length > 0);
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const config = await getStoreConfig();
   const companyName = String(config?.companyName ?? "Ventas Online");
@@ -47,7 +64,7 @@ export default async function Home() {
   });
   const minOrder = money.format(Number(config?.globalMinOrder ?? 0));
 
-  const faqs: Array<{ q: string; a: string }> = [
+  const defaultFaqs: Faq[] = [
     {
       q: "¿Cómo compro?",
       a: "Elige un catálogo, agrega productos al carrito y completa el checkout con nombre, teléfono, correo y dirección. Un asesor coordina el pago y la entrega por WhatsApp.",
@@ -69,6 +86,12 @@ export default async function Home() {
       a: `Por WhatsApp${phone ? ` al +${phone}` : ""} o desde la web. Ciudad: ${city}, Colombia.`,
     },
   ];
+
+  // Si el admin ya guardó sus FAQ (aunque sea una lista vacía), mandan ellas.
+  // Las de ejemplo solo se usan cuando el campo todavía no existe en Firestore.
+  const faqs = Array.isArray(config?.faqs)
+    ? normalizeFaqs(config.faqs)
+    : defaultFaqs;
 
   const faqLd = {
     "@context": "https://schema.org",
@@ -128,12 +151,14 @@ export default async function Home() {
           __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
         }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(faqLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      {faqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(faqLd).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       {/* Encabezado principal */}
       <section
         className="border-b text-white"
@@ -209,17 +234,22 @@ export default async function Home() {
       </section>
 
       {/* Preguntas frecuentes */}
-      <section className="max-w-6xl mx-auto px-4 mt-10 mb-12">
-        <h2 className="text-2xl font-semibold">Preguntas frecuentes</h2>
-        <dl className="mt-4 space-y-4">
-          {faqs.map((f) => (
-            <div key={f.q} className="rounded-xl border bg-white p-4 shadow-sm">
-              <dt className="font-semibold">{f.q}</dt>
-              <dd className="mt-1 text-sm text-muted-foreground">{f.a}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {faqs.length > 0 && (
+        <section className="max-w-6xl mx-auto px-4 mt-10 mb-12">
+          <h2 className="text-2xl font-semibold">Preguntas frecuentes</h2>
+          <dl className="mt-4 space-y-4">
+            {faqs.map((f, i) => (
+              <div
+                key={`${f.q}-${i}`}
+                className="rounded-xl border bg-white p-4 shadow-sm"
+              >
+                <dt className="font-semibold">{f.q}</dt>
+                <dd className="mt-1 text-sm text-muted-foreground">{f.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
     </main>
   );
 }
