@@ -87,12 +87,18 @@ Actualizar solo en hitos importantes, no en cada conversación.
   campos editados (vacío/"Sin cambiar" = intacto); stock omitido en productos
   con variantes; se avisa si un cambio dejaría un producto sin catálogo.
   Escrituras con WriteBatch en lotes de 400 + `updatedAt`.
+  Además edita en lote: **etiquetas** (agregar sin duplicar o reemplazar),
+  **título/descripción SEO** y **especificaciones** (merge por nombre de
+  campo, nunca borra las existentes).
 - **Borrar seleccionados**: icono de basura en la barra del multiselector.
   Diálogo de confirmación (N productos + fotos/videos; pedidos conservan
   sus datos) y luego diálogo de progreso no cancelable que borra por
   producto: media de Storage → doc de Firestore; fallas por SKU se
   reportan al final sin cortar el lote. Instalado y corriendo en el
   Redmi Note 9 Pro via adb (`flutter build apk` + `adb install -r`).
+- **Tile de catálogo**: sin lápiz ni edición directa (se edita con ⚙️ en la
+  AppBar de la pantalla de productos del catálogo); badge verde
+  "N productos" vía `count()` de Firestore (agregación en servidor).
 
 ## Flujo de compra (actual)
 
