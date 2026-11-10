@@ -75,6 +75,15 @@ Actualizar solo en hitos importantes, no en cada conversación.
 - Fix miniaturas estiradas: `SoftThumbnail` limita solo `cacheWidth` (antes
   `cacheWidth` + `cacheHeight` deformaban fotos no cuadradas).
 - FAB "Nuevo producto" con estilo 3D suave en `catalog_products_screen.dart`.
+- **Edición masiva (multiselector)**: mantener presionado un producto en la
+  lista de un catálogo activa el modo selección (vibración + borde azul +
+  checks); tocar alterna, botón atrás sale del modo antes de cerrar.
+  Barra contextual con contador, seleccionar todos (los visibles) y
+  "Editar seleccionados" → `bulk_edit_screen.dart`: precio, stock, disponible,
+  destacado, marca, orden, agregar/quitar catálogos. Solo se escriben los
+  campos editados (vacío/"Sin cambiar" = intacto); stock omitido en productos
+  con variantes; se avisa si un cambio dejaría un producto sin catálogo.
+  Escrituras con WriteBatch en lotes de 400 + `updatedAt`.
 
 ## Flujo de compra (actual)
 
