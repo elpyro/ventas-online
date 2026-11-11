@@ -1,0 +1,25 @@
+# Migración Productos Nuevos → VentasOnline
+
+Fecha: 2026-11-11T16:02:48.198Z
+Origen: respaldo JSON del proyecto briges (`productos-variantes-celtoons.json`).
+Destino: catálogos `estucheria` y `vidrios`. 
+Productos importados: 530.
+
+## Distribución por catálogo
+
+| Catálogo | Productos |
+| --- | --- |
+| `estucheria` | 439 |
+| `vidrios` | 91 |
+
+## SKUs modificados
+
+| SKU original | SKU final | Producto | Motivo |
+| --- | --- | --- | --- |
+| `(vacío)` | `INFINIX-HOT-60-PRO-PLUS-SPACE` | INFINIX HOT 60 PRO PLUS.SPACE | SKU vacío → generado del nombre || `(vacío)` | `MOTOROLA-G32-SPACE` | MOTOROLA G32.SPACE | SKU vacío → generado del nombre || `(vacío)` | `OPPO-A38-SPACE` | OPPO A38.SPACE | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-SPACE` | VARIOS.SPACE | SKU vacío → generado del nombre || `(vacío)` | `OPPO-A58-SPACE` | OPPO A58.SPACE | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-A37-SPACE` | SAMSUNG A37.SPACE | SKU vacío → generado del nombre || `(vacío)` | `XIAOMI-NOTE-11-PRO-5G-SPACE` | XIAOMI NOTE 11 PRO 5G.SPACE | SKU vacío → generado del nombre || `(vacío)` | `HONOR-X9D-MAGIC-8-LITE-SPACE` | HONOR X9D/MAGIC 8 LITE.SPACE | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-ARMADURA` | VARIOS.ARMADURA | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-S26-ULTRA-ARMADURA` | SAMSUNG S26 ULTRA.ARMADURA | SKU vacío → generado del nombre || `(vacío)` | `REDMI-A7-PRO-ARMADURA` | REDMI A7 PRO.ARMADURA | SKU vacío → generado del nombre || `(vacío)` | `XIAOMI-NOTE-15-4G-ARMADURA` | XIAOMI NOTE 15 4G.ARMADURA | SKU vacío → generado del nombre || `(vacío)` | `TECNO-SPARK-GO-2024-SILICON-LINEA` | TECNO SPARK GO 2024.SILICON LÍNEA | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-SILICON-LINEA` | VARIOS.SILICON LÍNEA | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-VIDRIO-ANTIESPIA` | VARIOS.VIDRIO ANTIESPÍA | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-A32-4G-VIDRIO-ANTIESPIA` | SAMSUNG A32 4G.VIDRIO ANTIESPÍA | SKU vacío → generado del nombre || `A15/15P` | `A15-15P` | IPHONE 15/15 PRO/16.VIDRIO ANTIESPÍA | espacios o «/» reemplazados por guiones || `(vacío)` | `VARIOS-VIDRIO-BLINDADO` | VARIOS.VIDRIO BLINDADO | SKU vacío → generado del nombre || `BLINX7D/400SMART` | `BLINX7D-400SMART` | HONOR X7D/400SMART.VIDRIO BLINDADO | espacios o «/» reemplazados por guiones || `(vacío)` | `CAMON-20-4G-SILICON-LINEA-ENCARGO` | CAMON 20 4G.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `OPPO-RENO-13-SILICON-LINEA-ENCARGO` | OPPO RENO 13.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-A33-SILICON-LINEA-ENCARGO` | SAMSUNG A33.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `INFINIX-HOT-50I-SILICON-LINEA-ENCARGO` | INFINIX HOT 50I.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-A53-SILICON-LINEA-ENCARGO` | SAMSUNG A53.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `SAMSUNG-A26-SILICON-LINEA-ENCARGO` | SAMSUNG A26.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `REDMI-9A-SILICON-LINEA-ENCARGO` | REDMI 9A.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `REDMI-9T-SILICON-LINEA-ENCARGO` | REDMI 9T.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `TECNO-SPARK-GO-2024-SILICON-LINEA-ENCARG` | TECNO SPARK GO 2024.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `OPPO-RENO-13F-SILICON-LINEA-ENCARGO` | OPPO RENO 13F.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `HONOR-400-LITE-SILICON-LINEA-ENCARGO` | HONOR 400 LITE.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `REDMI-A5-SILICON-LINEA-ENCARGO` | REDMI A5.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `INFINIX-HOT-50-PRO-SILICON-LINEA-ENCARGO` | INFINIX HOT 50 PRO.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-SILICON-LINEA-ENCARGO` | Varios.SILICON LINEA ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `VARIOS-SILICON-CASE-REFERENCIAS-NUEVAS` | Varios.SILICON CASE REFERENCIAS NUEVAS | SKU vacío → generado del nombre || `(vacío)` | `HONOR-X5C-SILICON-NUEVO-ENCARGO` | HONOR X5C.SILICON NUEVO ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `VIVO-V50-LITE-SILICON-NUEVO-ENCARGO` | VIVO V50 LITE.SILICON NUEVO ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `OPPO-A6-PRO-SILICON-NUEVO-ENCARGO` | OPPO A6 PRO.SILICON NUEVO ENCARGO | SKU vacío → generado del nombre || `(vacío)` | `INFINIX-SMART-20-SILICON-NUEVO-ENCARGO` | INFINIX SMART 20.SILICON NUEVO ENCARGO | SKU vacío → generado del nombre |
+
+## Stocks negativos ajustados a 0
+
+| SKU | Producto | Stock original |
+| --- | --- | --- |
+| `S11` | HONOR X7C/200 SMART.SPACE | -1 || `S61` | MOTOROLA G54.SPACE | -1 || `S65` | OPPO A57/A77.SPACE | -2 || `VARIOS-ARMADURA` | VARIOS.ARMADURA | -1 || `VARIOS-VIDRIO-ANTIESPIA` | VARIOS.VIDRIO ANTIESPÍA | -4 || `VARIOS-VIDRIO-BLINDADO` | VARIOS.VIDRIO BLINDADO | -34 |

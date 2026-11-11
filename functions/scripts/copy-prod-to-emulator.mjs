@@ -76,7 +76,8 @@ async function listProduction(collection) {
 
 async function writeToEmulator(doc) {
   // doc.name = projects/{p}/databases/(default)/documents/{collection}/{id}
-  const [, , , , , , collection, id] = doc.name.split("/");
+  // -> 7 segmentos: collection es el 6º (índice 5) e id el 7º (índice 6).
+  const [, , , , , collection, id] = doc.name.split("/");
   const fields = doc.fields ?? {};
   const url = new URL(`${EMU}/${collection}/${encodeURIComponent(id)}`);
   // updateMask con todos los campos: así el documento queda idéntico y se
