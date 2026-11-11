@@ -629,14 +629,6 @@ class _ProductTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Código: ${doc.id}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(fontSize: 11, color: SoftTheme.textMuted),
-                ),
               ],
             ),
           ),

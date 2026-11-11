@@ -164,11 +164,6 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
                               Wrap(
                                 spacing: 6,
                                 children: [
-                                  SoftBadge(
-                                    text: 'ID: ${d.id}',
-                                    color: SoftTheme.textMuted,
-                                    size: 11,
-                                  ),
                                   _ProductCount(catalogId: d.id),
                                   SoftBadge(
                                     text:
