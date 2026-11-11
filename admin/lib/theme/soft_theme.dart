@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 enum SnackType { success, error, info }
@@ -469,31 +470,30 @@ class SoftThumbnail extends StatelessWidget {
               : Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      url,
+                    CachedNetworkImage(
+                      imageUrl: url,
                       fit: BoxFit.cover,
                       // Miniatura 88×88: solo se limita el ancho. Fijar ancho y
                       // alto a la vez deforma la imagen si no es cuadrada.
-                      cacheWidth: 176,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, __, ___) => Container(
+                      // maxWidthDiskCache guarda en disco la versión reducida
+                      // para no llenar el teléfono con fotos a tamaño original.
+                      memCacheWidth: 176,
+                      maxWidthDiskCache: 176,
+                      errorWidget: (_, __, ___) => Container(
                         color: placeholderColor,
                         child: Icon(Icons.image_not_supported_outlined,
                             size: 30, color: SoftTheme.textMuted),
                       ),
-                      loadingBuilder: (context, child, progress) =>
-                          progress == null
-                              ? child
-                              : Container(
-                                  color: placeholderColor,
-                                  child: const Center(
-                                    child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2)),
-                                  ),
-                                ),
+                      placeholder: (_, __) => Container(
+                        color: placeholderColor,
+                        child: const Center(
+                          child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2)),
+                        ),
+                      ),
                     ),
                     if (featured)
                       Positioned(

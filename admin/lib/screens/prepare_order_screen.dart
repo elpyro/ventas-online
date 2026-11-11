@@ -1,5 +1,6 @@
 import '../theme/soft_theme.dart';
 import '../utils/money.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -173,7 +174,9 @@ class _PrepareOrderScreenState extends State<PrepareOrderScreen> {
         child: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: InteractiveViewer(
-            child: Image.network(url, fit: BoxFit.contain),
+            // Imagen grande ampliable: se deja resolución completa para
+            // que el zoom no se pixele (sin memCacheWidth/maxWidthDiskCache).
+            child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
           ),
         ),
       ),
@@ -333,9 +336,14 @@ class _PrepareOrderScreenState extends State<PrepareOrderScreen> {
                                       color: theme.colorScheme.accent,
                                       child: const Icon(Icons.image_outlined),
                                     )
-                                  : Image.network(thumb,
+                                  : CachedNetworkImage(
+                                      imageUrl: thumb,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
+                                      // Miniatura 56×56: versión reducida en
+                                      // memoria y disco.
+                                      memCacheWidth: 112,
+                                      maxWidthDiskCache: 112,
+                                      errorWidget: (_, __, ___) => Container(
                                             color: theme.colorScheme.accent,
                                             child: const Icon(
                                                 Icons.image_outlined),

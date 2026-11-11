@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../screens/catalog_products_screen.dart';
@@ -130,10 +131,14 @@ class _CatalogsScreenState extends State<CatalogsScreen> {
                             borderRadius:
                                 BorderRadius.circular(SoftTheme.radiusThumb),
                             child: cover.isNotEmpty
-                                ? Image.network(
-                                    cover,
+                                ? CachedNetworkImage(
+                                    imageUrl: cover,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
+                                    // Portada 56×56: versión reducida en
+                                    // memoria y disco.
+                                    memCacheWidth: 112,
+                                    maxWidthDiskCache: 112,
+                                    errorWidget: (_, __, ___) => Container(
                                       color: SoftTheme.inputBg,
                                       child: const Icon(Icons.grid_view,
                                           color: SoftTheme.textMuted),

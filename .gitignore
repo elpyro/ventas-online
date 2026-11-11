@@ -38,9 +38,13 @@ admin/android/local.properties
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+web/server.log
 
 # --- Respaldos locales de datos ---
 backups/
+
+# --- Borradores de código en pausa (offline/cache sin dependencias aún) ---
+admin/.drafts/
 
 # --- Capturas y archivos temporales del proyecto ---
 admin_*.png
