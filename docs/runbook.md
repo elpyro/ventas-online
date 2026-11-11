@@ -238,7 +238,7 @@ firebase use --json
 | `No emulators to start` | `--only` mal interpretado | Usar comillas: `--only "functions,firestore"` |
 | `Cannot emulate a web framework` | `firebase.json` incluye Hosting | Usar `--config firebase.emulators.json` |
 | `spawn java ENOENT` | Sin Java en el PATH | Configurar `JAVA_HOME` con el JDK de Android Studio |
-| `Cannot determine backend specification` | `firebase-functions` viejo | Mantener `7.4.0` o superior y recompilar |
+| `Cannot determine backend specification` | `firebase-functions` viejo, o el CLI solo espera 10 s a que la función declare su manifiesto | Mantener `7.4.0` o superior, recompilar y ampliar el margen: `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"` |
 | El webhook responde 404 en el emulador | Functions no cargaron | Revisar el log; compilar con `npm run build` |
 | `Failed to initialize Firestore client` al sembrar | Falta ADC en producción | `gcloud auth application-default login` |
 | La web no muestra datos | `.env.local` incompleto | Revisar `NEXT_PUBLIC_FIREBASE_*` |

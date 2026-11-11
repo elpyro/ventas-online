@@ -143,6 +143,10 @@ Resend (correo).
 3. `isAvailable` deriva de `stock > 0`.
 4. El webhook **no toca** `variants`, `images` ni `videoUrl`: los administra
    el APK; los envíos parciales del ERP no los pisan.
+5. Tampoco escribe `name` ni `price` (los administra el APK) ni crea productos
+   inexistentes (`404`): un tercero no puede renombrar ni revaluar el catálogo.
+6. Los campos ignorados (`images`, `description`, `name`, `price`) se devuelven
+   en `ignored` para que el ERP sepa que no surtieron efecto.
 
 ## Flujo 9 — Medios y gestión desde el APK
 

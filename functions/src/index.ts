@@ -177,7 +177,7 @@ export const webhookSku = onRequest(
       images?: string[];
       description?: string;
     };
-    const { sku, name, price, stock, catalogIds } = body;
+    const { sku, stock, catalogIds } = body;
 
     if (!sku || typeof sku !== "string") {
       res.status(400).json({ error: "sku is required" });
@@ -209,12 +209,15 @@ export const webhookSku = onRequest(
     const existingVariants = existingData?.variants;
     const hasVariants = Array.isArray(existingVariants) && existingVariants.length > 0;
 
-    // Fotos y descripción las gestiona el APK: el webhook no las pisa. Se
-    // reportan como ignoradas para que quien llama sepa que no surtieron
-    // efecto.
+    // Fotos, descripción, nombre y precio los administra el APK: el webhook
+    // no los pisa. Se reportan como ignorados para que quien llama sepa que
+    // no surtieron efecto. Blindar nombre y precio evita que un tercero
+    // renombre productos o manipule los precios de la tienda.
     const ignored: string[] = [];
     if (body.images !== undefined) ignored.push("images");
     if (body.description !== undefined) ignored.push("description");
+    if (body.name !== undefined) ignored.push("name");
+    if (body.price !== undefined) ignored.push("price");
 
     // El stock de un producto con variantes se recalcula desde ellas: pisarlo
     // aquí rompería el inventario.
@@ -227,10 +230,6 @@ export const webhookSku = onRequest(
       updatedAt: new Date(),
     };
 
-    if (typeof name === "string") payload.name = name;
-    if (typeof price === "number" && Number.isFinite(price) && price >= 0) {
-      payload.price = price;
-    }
     if (
       !hasVariants &&
       typeof stock === "number" &&

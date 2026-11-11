@@ -106,6 +106,9 @@ async function main() {
   const fields = existing.json?.fields ?? {};
   const currentStock = Number(fields.stock?.integerValue ?? 0);
   const currentName = fields.name?.stringValue;
+  const currentPrice = Number(
+    fields.price?.doubleValue ?? fields.price?.integerValue ?? 0
+  );
   const currentImage = fields.images?.arrayValue?.values?.[0]?.stringValue;
 
   // Actualización parcial "inocua": re-escribe el stock que ya tiene y manda
@@ -116,6 +119,8 @@ async function main() {
       stock: currentStock,
       images: ["https://picsum.photos/seed/no-debe-cambiar/600/400"],
       description: "no debe escribirse",
+      name: "NOMBRE QUE NO DEBE ESCRIBIRSE",
+      price: 1,
     },
     { "x-webhook-secret": secret }
   );
@@ -136,13 +141,30 @@ async function main() {
     Array.isArray(partialBody.ignored) && partialBody.ignored.includes("description"),
     `ignored: ${JSON.stringify(partialBody.ignored)}`
   );
+  check(
+    "reporta name como ignorado",
+    Array.isArray(partialBody.ignored) && partialBody.ignored.includes("name"),
+    `ignored: ${JSON.stringify(partialBody.ignored)}`
+  );
+  check(
+    "reporta price como ignorado",
+    Array.isArray(partialBody.ignored) && partialBody.ignored.includes("price"),
+    `ignored: ${JSON.stringify(partialBody.ignored)}`
+  );
 
   const after = await getDoc(testSku);
   const afterFields = after.json?.fields ?? {};
   check(
-    "conserva el nombre",
+    "NO pisa el nombre (blindado)",
     afterFields.name?.stringValue === currentName,
     `name: ${afterFields.name?.stringValue}`
+  );
+  check(
+    "NO pisa el precio (blindado)",
+    Number(
+      afterFields.price?.doubleValue ?? afterFields.price?.integerValue ?? 0
+    ) === currentPrice,
+    `price: ${JSON.stringify(afterFields.price)}`
   );
   check(
     "conserva el stock (re-escrito con el mismo valor)",
