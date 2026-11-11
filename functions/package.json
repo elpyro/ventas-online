@@ -14,6 +14,8 @@
     "import:celtoons": "node scripts/import-celtoons.mjs",
     "admin:claim": "node scripts/set-admin-claim.mjs",
     "webhook:test": "node scripts/test-webhook.mjs",
+    "cleanup:duplicates": "node scripts/cleanup-webhook-duplicates.mjs",
+    "restore:images": "node scripts/restore-product-images.mjs",
     "logs": "firebase functions:log"
   },
   "main": "lib/index.js",

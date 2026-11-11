@@ -39,6 +39,9 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 
+# --- Respaldos locales de datos ---
+backups/
+
 # --- Capturas y archivos temporales del proyecto ---
 admin_*.png
 verify_*.png

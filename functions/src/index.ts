@@ -148,6 +148,11 @@ function parseItems(raw: unknown): OrderItemInput[] {
 // Módulo A: Webhook por SKU
 // ---------------------------------------------------------------------------
 
+/** Normaliza un SKU igual que la migración CELTOONS: espacios y barras → guiones. */
+function normalizeSku(value: string): string {
+  return value.trim().replace(/\s+/g, "-").replace(/\/+/g, "-");
+}
+
 export const webhookSku = onRequest(
   { region: "us-central1", cors: true },
   async (req, res) => {
@@ -163,8 +168,7 @@ export const webhookSku = onRequest(
       return;
     }
 
-    const { sku, name, price, stock, catalogIds, images, description } = (req
-      .body ?? {}) as {
+    const body = (req.body ?? {}) as {
       sku?: string;
       name?: string;
       price?: number;
@@ -173,24 +177,53 @@ export const webhookSku = onRequest(
       images?: string[];
       description?: string;
     };
+    const { sku, name, price, stock, catalogIds } = body;
 
     if (!sku || typeof sku !== "string") {
       res.status(400).json({ error: "sku is required" });
       return;
     }
 
-    const docRef = db.collection("products").doc(sku);
-    const existing = await docRef.get();
+    // Guarda el SKU original tal como llegó (con espacios, si los hay)
+    // para el log y la respuesta resolvedFrom.
+    const requested = sku.trim();
 
-    // Un producto nuevo necesita al menos nombre y precio.
-    if (!existing.exists && (typeof name !== "string" || typeof price !== "number")) {
-      res.status(400).json({ error: "name and price are required for new products" });
+    // Normaliza el SKU igual que la migración CELTOONS: espacios y barras → guiones.
+    // Siempre buscamos el SKU canónico: si envían "CABLE 21" → buscamos "CABLE-21".
+    // Esto evita crear duplicados invisibles (el incidente del fondo).
+    const normalized = normalizeSku(sku);
+
+    // Buscamos SOLO el SKU normalizado. Si no existe, 404 sin crear nada.
+    const snap = await db.collection("products").doc(normalized).get();
+    if (!snap.exists) {
+      res.status(404).json({
+        error: "product not found",
+        sku: normalized,
+        hint: "the webhook only updates existing products; create new ones from the admin app",
+      });
       return;
     }
+    const target = snap;
 
-    // Solo escribimos los campos que llegan: una actualización parcial no borra datos.
+    const existingData = target.data() as { variants?: unknown[] } | undefined;
+    const existingVariants = existingData?.variants;
+    const hasVariants = Array.isArray(existingVariants) && existingVariants.length > 0;
+
+    // Fotos y descripción las gestiona el APK: el webhook no las pisa. Se
+    // reportan como ignoradas para que quien llama sepa que no surtieron
+    // efecto.
+    const ignored: string[] = [];
+    if (body.images !== undefined) ignored.push("images");
+    if (body.description !== undefined) ignored.push("description");
+
+    // El stock de un producto con variantes se recalcula desde ellas: pisarlo
+    // aquí rompería el inventario.
+    if (hasVariants && stock !== undefined) ignored.push("stock");
+
+    // Solo escribimos los campos que llegan y están permitidos: una
+    // actualización parcial no borra el resto del documento.
     const payload: Record<string, unknown> = {
-      sku,
+      sku: target.id,
       updatedAt: new Date(),
     };
 
@@ -198,32 +231,37 @@ export const webhookSku = onRequest(
     if (typeof price === "number" && Number.isFinite(price) && price >= 0) {
       payload.price = price;
     }
-    if (typeof stock === "number" && Number.isInteger(stock) && stock >= 0) {
+    if (
+      !hasVariants &&
+      typeof stock === "number" &&
+      Number.isInteger(stock) &&
+      stock >= 0
+    ) {
       payload.stock = stock;
       payload.isAvailable = stock > 0;
     }
     if (Array.isArray(catalogIds)) {
-      payload.catalogIds = catalogIds.filter((id) => typeof id === "string");
-    }
-    if (Array.isArray(images)) {
-      payload.images = images.filter((image) => typeof image === "string");
-    }
-    if (typeof description === "string") {
-      payload.description = description;
+      const valid = catalogIds.filter((id) => typeof id === "string" && id !== "");
+      // Un producto sin catálogos desaparece de la web: el webhook nunca lo
+      // deja vacío.
+      if (valid.length > 0) payload.catalogIds = valid;
+      else ignored.push("catalogIds");
     }
 
-    if (!existing.exists) {
-      payload.stock = typeof payload.stock === "number" ? payload.stock : 0;
-      payload.isAvailable = typeof payload.stock === "number" && payload.stock > 0;
-      payload.catalogIds = Array.isArray(payload.catalogIds) ? payload.catalogIds : [];
-      payload.images = Array.isArray(payload.images) ? payload.images : [];
-      payload.description = typeof payload.description === "string" ? payload.description : "";
-    }
+    await target.ref.set(payload, { merge: true });
 
-    await docRef.set(payload, { merge: true });
-
-    logger.info("SKU upserted", { sku, partial: true });
-    res.status(200).json({ ok: true, sku });
+    logger.info("SKU updated", {
+      sku: target.id,
+      requestedSku: requested,
+      resolved: target.id !== requested,
+      ignored,
+    });
+    res.status(200).json({
+      ok: true,
+      sku: target.id,
+      ...(target.id !== requested ? { resolvedFrom: requested } : {}),
+      ...(ignored.length > 0 ? { ignored } : {}),
+    });
   }
 );
 
