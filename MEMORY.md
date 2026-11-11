@@ -1,6 +1,6 @@
 ﻿# Memoria del proyecto — Ventas Online
 
-Última actualización: 2026-11-10
+Última actualización: 2026-11-11
 Estado cambiante. Las reglas estables viven en `AGENTS.md`.
 Actualizar solo en hitos importantes, no en cada conversación.
 
@@ -16,6 +16,8 @@ Actualizar solo en hitos importantes, no en cada conversación.
   `RESEND_API_KEY`/`RESEND_FROM`: no salen correos de pedidos.
   El secret solo vive en `functions/.env` (ignorado por git); nunca en chats.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
+  Para que el CLI alcance a cargar las Functions: `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"`
+  (si no, falla con "Cannot determine backend specification. Timeout after 10000").
 - **Migración CELTOONS** (respaldo JSON del proyecto briges, tienda de celulares):
   280 productos importados a PRODUCCIÓN y al emulador con
   `npm --prefix functions run import:celtoons` (script: `functions/scripts/import-celtoons.mjs`).
@@ -30,6 +32,8 @@ Actualizar solo en hitos importantes, no en cada conversación.
   del proyecto). REST sin `?key=` dio un 403 transitorio tras la escritura masiva;
   se recuperó solo.
 - Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
+  OJO: `getAllProducts(limit = 500)` en `web/lib/serverData.ts` y producción ya
+  tiene **786** documentos en `products`: el catálogo de la web se corta en 500.
 - Web de emulador en http://localhost:3002 (`next dev`, `NEXT_PUBLIC_USE_EMULATORS=true`).
 - Emulador con datos de PRODUCCIÓN (copiados por `npm --prefix functions run copy:prod`).
 
@@ -37,10 +41,22 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 - Copia automática desde producción de `products`, `catalogs` y `store_config`
   (`functions/scripts/copy-prod-to-emulator.mjs`).
+- El emulador de Firestore **no conserva los datos entre arranques**: hay que
+  volver a copiar (`copy:prod`) cada vez que se reinicia.
 - Pedidos demo y admin de prueba siguen en el emulador (no los copia el script).
 
 ## Funcionando
 
+- **Webhook blindado (código listo, FALTA el deploy)**: `webhookSku` ya no escribe
+  `name` ni `price` (tampoco `images`/`description`); solo `stock`, `isAvailable` y
+  `catalogIds`. Los campos ignorados se devuelven en `ignored` y se registran en el log.
+  17/17 checks en `npm --prefix functions run webhook:test` (probado contra emulador).
+- **APK con caché de imágenes**: `cached_network_image 3.4.1` en `SoftThumbnail`
+  (cubre todas las listas), miniaturas de "Preparar Pedido" y portadas de catálogo.
+  `memCacheWidth`/`maxWidthDiskCache` (176 px y 112 px) para no guardar en el
+  teléfono las fotos a tamaño original; la imagen grande con zoom va a resolución
+  completa. Pendiente: portadas de Config y fotos de la edición de producto.
+  Los borradores de offline/crashlytics quedaron en `admin/.drafts/` (ignorado por git).
 - `createOrder` en servidor: valida precios/stock/mínimos, descuenta inventario,
   pedido atómico. Ahora también soporta **variantes** (stock y precio por variante;
   `stock` del producto se recalcula como la suma). Web llama con `httpsCallable`.
@@ -112,16 +128,21 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Pendiente (priorizado)
 
-1. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
+1. **Desplegar el webhook blindado** (`firebase deploy --only functions:webhookSku`):
+   el código ya no escribe nombre ni precio, pero producción sigue con la versión
+   anterior. Verificado 17/17 contra el emulador.
+2. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
    redesplegar `onOrderCreated`: sin esos secretos no salen correos de
    pedidos. (`WEBHOOK_SECRET` ya está hecho y verificado.)
-2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
-3. Tests de reglas/Functions, CI y proyecto `dev` separado.
-4. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
-5. Probar la subida de fotos/video desde el APK contra los emuladores
+3. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
+4. Subir el límite de `getAllProducts` (500) o paginar: producción ya tiene 786
+   productos y la web solo muestra los primeros 500.
+5. Tests de reglas/Functions, CI y proyecto `dev` separado.
+6. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
+7. Probar la subida de fotos/video desde el APK contra los emuladores
    (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).
-6. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
-7. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
+8. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
+9. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
    desde el APK o borrarlos cuando haya productos reales para ellos.
 
 ## Decisiones

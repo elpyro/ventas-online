@@ -80,8 +80,16 @@ firebase emulators:start --config firebase.emulators.json --only "functions,fire
 - Usar `firebase.emulators.json`: el `firebase.json` principal incluye Hosting y pide la experimentación `webframeworks`.
 - El emulador de Firestore necesita Java; sin `JAVA_HOME` falla con `spawn java ENOENT`.
 - `firebase-functions` 7.4.0 es necesario para que el emulador cargue las Functions; no bajarlo sin probar.
+- El CLI solo espera 10 s al manifiesto de las Functions: si falla con
+  "Cannot determine backend specification. Timeout after 10000", ampliar con
+  `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"`.
+- El emulador de Firestore no conserva los datos al reiniciar: volver a copiar
+  con `npm --prefix functions run copy:prod`.
 - El seed de producción requiere credenciales ADC; los emuladores no.
 - No hay `predeploy`: compilar Functions a mano antes de desplegar.
+- En el Redmi, `adb install -r` a veces deja la app solo en el usuario 10
+  ("security space" de MIUI) y no en el principal: instalar con `--user 0`
+  y verificar con `adb shell pm list packages --user 0 ventas`.
 
 ## Documentación
 
