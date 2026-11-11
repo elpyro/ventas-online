@@ -64,7 +64,7 @@ class AdminApp extends StatelessWidget {
         colorScheme: ShadSlateColorScheme.dark(),
       ),
       appBuilder: (context) => MaterialApp(
-        title: 'Ventas Online Admin',
+        title: 'Administrador Celtoons',
         theme: SoftTheme.materialTheme,
         localizationsDelegates: const [
           GlobalShadLocalizations.delegate,
