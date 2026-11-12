@@ -148,8 +148,21 @@ function parseItems(raw: unknown): OrderItemInput[] {
 // Módulo A: Webhook por SKU
 // ---------------------------------------------------------------------------
 
-/** Normaliza un SKU igual que la migración CELTOONS: espacios y barras → guiones. */
+/**
+ * Normaliza un SKU: los espacios SOLO se eliminan ("A 1" → "A1"). Casi todos
+ * los productos se importaron con el SKU sin espacios y el ERP los manda con
+ * espacios, así que la regla es quitarlos, no ponerles guion. Las barras
+ * siguen siendo guion, como en la migración CELTOONS ("A5511-9/10" → "A5511-9-10").
+ */
 function normalizeSku(value: string): string {
+  return value.trim().replace(/\s+/g, "").replace(/\/+/g, "-");
+}
+
+/**
+ * Variante con guion ("A 1" → "A-1"): la regla anterior. Se usa como respaldo
+ * para los pocos SKUs que en la migración CELTOONS quedaron con guion.
+ */
+function normalizeSkuDashed(value: string): string {
   return value.trim().replace(/\s+/g, "-").replace(/\/+/g, "-");
 }
 
@@ -188,13 +201,20 @@ export const webhookSku = onRequest(
     // para el log y la respuesta resolvedFrom.
     const requested = sku.trim();
 
-    // Normaliza el SKU igual que la migración CELTOONS: espacios y barras → guiones.
-    // Siempre buscamos el SKU canónico: si envían "CABLE 21" → buscamos "CABLE-21".
-    // Esto evita crear duplicados invisibles (el incidente del fondo).
+    // Normaliza el SKU quitando los espacios ("A 1" → "A1"). Siempre buscamos
+    // el SKU canónico: así evitamos crear duplicados invisibles (el incidente
+    // del fondo).
     const normalized = normalizeSku(sku);
+    const dashed = normalizeSkuDashed(sku);
 
-    // Buscamos SOLO el SKU normalizado. Si no existe, 404 sin crear nada.
-    const snap = await db.collection("products").doc(normalized).get();
+    // Buscamos el SKU normalizado y, si no existe, la variante con guion
+    // (respaldo para los SKUs que quedaron con guion en la migración CELTOONS).
+    // Si no existe ninguno, 404 sin crear nada.
+    let snap = await db.collection("products").doc(normalized).get();
+    if (!snap.exists && dashed !== normalized) {
+      const alt = await db.collection("products").doc(dashed).get();
+      if (alt.exists) snap = alt;
+    }
     if (!snap.exists) {
       res.status(404).json({
         error: "product not found",
@@ -252,12 +272,14 @@ export const webhookSku = onRequest(
     logger.info("SKU updated", {
       sku: target.id,
       requestedSku: requested,
+      normalized,
       resolved: target.id !== requested,
       ignored,
     });
     res.status(200).json({
       ok: true,
       sku: target.id,
+      normalized,
       ...(target.id !== requested ? { resolvedFrom: requested } : {}),
       ...(ignored.length > 0 ? { ignored } : {}),
     });

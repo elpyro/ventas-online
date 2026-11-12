@@ -23,6 +23,9 @@ const secret = process.env.WEBHOOK_SECRET ?? "dev-secret";
 const testSku = process.env.WEBHOOK_TEST_SKU ?? "CABLE 21";
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
+// En producción la REST de Firestore pide token: se usa GOOGLE_ACCESS_TOKEN
+// (o el que devuelva `gcloud auth print-access-token`).
+const accessToken = (process.env.GOOGLE_ACCESS_TOKEN ?? "").trim();
 const restBase = emulatorHost
   ? `http://${emulatorHost}/v1/projects/${projectId}/databases/(default)/documents`
   : `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
@@ -39,7 +42,8 @@ async function post(body, headers = {}) {
 
 async function getDoc(sku) {
   const response = await fetch(
-    `${restBase}/products/${encodeURIComponent(sku)}`
+    `${restBase}/products/${encodeURIComponent(sku)}`,
+    accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}
   );
   return {
     status: response.status,
@@ -182,13 +186,15 @@ async function main() {
     `description: ${afterFields.description?.stringValue}`
   );
 
-  // Resolución de SKU: el mismo producto con espacios en vez de guiones debe
-  // resolver al documento real ("CABLE 21" → "CABLE-21"). Solo toca updatedAt.
-  const spaced = testSku.replace(/-/g, " ");
+  // Normalización del SKU: los espacios SOLO se eliminan ("A 1" → "A1").
+  // Si el SKU canónico tiene guiones, la variante con espacios se resuelve con
+  // el respaldo de guiones (regla vieja, para lo que quedó de la migración).
+  const half = Math.ceil(testSku.length / 2);
+  const spaced = testSku.includes("-")
+    ? testSku.replace(/-/g, " ")
+    : `${testSku.slice(0, half)} ${testSku.slice(half)}`;
   const resolved = await post({ sku: spaced }, { "x-webhook-secret": secret });
   const resolvedBody = resolved.status === 200 ? JSON.parse(resolved.text) : {};
-  console.log("resolvedBody keys:", Object.keys(resolvedBody));
-  console.log("resolvedBody.resolvedFrom:", resolvedBody.resolvedFrom);
   console.log("spaced:", spaced);
   check(
     "resuelve SKU con espacios al real (200)",
@@ -199,6 +205,11 @@ async function main() {
     "reporta resolvedFrom",
     resolvedBody.resolvedFrom === spaced,
     `resolvedFrom: ${JSON.stringify(resolvedBody.resolvedFrom)}, spaced: ${spaced}`
+  );
+  check(
+    "normaliza quitando los espacios (no pone guion)",
+    resolvedBody.normalized === spaced.replace(/\s+/g, ""),
+    `normalized: ${JSON.stringify(resolvedBody.normalized)}, spaced: ${spaced}`
   );
 }
 

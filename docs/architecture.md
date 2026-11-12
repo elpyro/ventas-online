@@ -147,6 +147,12 @@ Resend (correo).
    inexistentes (`404`): un tercero no puede renombrar ni revaluar el catálogo.
 6. Los campos ignorados (`images`, `description`, `name`, `price`) se devuelven
    en `ignored` para que el ERP sepa que no surtieron efecto.
+7. **Normalización del SKU**: los espacios solo se eliminan (`"A 1"` → `"A1"`),
+   porque casi todos los productos se importaron con el SKU sin espacios. Las
+   barras siguen siendo guion (`"A5511-9/10"` → `"A5511-9-10"`). Si el SKU
+   normalizado no existe, se prueba la variante con guion (`"A 1"` → `"A-1"`)
+   como respaldo de los productos de la migración CELTOONS. La respuesta
+   incluye `normalized` con la forma que se buscó.
 
 ## Flujo 9 — Medios y gestión desde el APK
 

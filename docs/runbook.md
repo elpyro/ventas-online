@@ -112,11 +112,16 @@ RESEND_FROM=pedidos@ventas.online
 $env:WEBHOOK_URL = "https://us-central1-ventas-online-ec.cloudfunctions.net/webhookSku"
 $env:WEBHOOK_SECRET = "<secreto-real>"
 $env:FIREBASE_PROJECT = "ventas-online-ec"
+$env:GOOGLE_ACCESS_TOKEN = (gcloud auth print-access-token).Trim()
+$env:WEBHOOK_TEST_SKU = "A1"
 Remove-Item Env:FIRESTORE_EMULATOR_HOST -ErrorAction SilentlyContinue
 npm --prefix functions run webhook:test
 ```
 
-Atención: este test escribe en producción.
+Atención: este test escribe en producción (re-escribe el stock que el producto
+ya tiene y solo toca `updatedAt`). El token de gcloud es para leer los
+documentos y verificar que nombre y precio no cambian; sin él el script omite
+esas comprobaciones.
 
 ## Verificar datos
 

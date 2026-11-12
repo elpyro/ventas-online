@@ -47,10 +47,16 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Funcionando
 
-- **Webhook blindado (código listo, FALTA el deploy)**: `webhookSku` ya no escribe
+- **Webhook blindado (desplegado el 2026-11-11)**: `webhookSku` no escribe
   `name` ni `price` (tampoco `images`/`description`); solo `stock`, `isAvailable` y
   `catalogIds`. Los campos ignorados se devuelven en `ignored` y se registran en el log.
-  17/17 checks en `npm --prefix functions run webhook:test` (probado contra emulador).
+  18/18 checks contra el emulador y contra producción
+  (`npm --prefix functions run webhook:test`; en producción necesita
+  `GOOGLE_ACCESS_TOKEN` para leer los documentos).
+  **Normalización del SKU: los espacios solo se eliminan** (`"A 1"` → `"A1"`),
+  no se vuelven guion; las barras sí (`"A5511-9/10"` → `"A5511-9-10"`).
+  Si no existe, se prueba la variante con guion como respaldo de los SKUs con
+  guion de la migración CELTOONS. La respuesta trae `normalized`.
 - **APK con caché de imágenes**: `cached_network_image 3.4.1` en `SoftThumbnail`
   (cubre todas las listas), miniaturas de "Preparar Pedido" y portadas de catálogo.
   `memCacheWidth`/`maxWidthDiskCache` (176 px y 112 px) para no guardar en el
@@ -128,21 +134,18 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Pendiente (priorizado)
 
-1. **Desplegar el webhook blindado** (`firebase deploy --only functions:webhookSku`):
-   el código ya no escribe nombre ni precio, pero producción sigue con la versión
-   anterior. Verificado 17/17 contra el emulador.
-2. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
+1. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
    redesplegar `onOrderCreated`: sin esos secretos no salen correos de
    pedidos. (`WEBHOOK_SECRET` ya está hecho y verificado.)
-3. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
-4. Subir el límite de `getAllProducts` (500) o paginar: producción ya tiene 786
+2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
+3. Subir el límite de `getAllProducts` (500) o paginar: producción ya tiene 786
    productos y la web solo muestra los primeros 500.
-5. Tests de reglas/Functions, CI y proyecto `dev` separado.
-6. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
-7. Probar la subida de fotos/video desde el APK contra los emuladores
+4. Tests de reglas/Functions, CI y proyecto `dev` separado.
+5. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
+6. Probar la subida de fotos/video desde el APK contra los emuladores
    (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).
-8. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
-9. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
+7. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
+8. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
    desde el APK o borrarlos cuando haya productos reales para ellos.
 
 ## Decisiones
