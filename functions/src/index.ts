@@ -820,11 +820,18 @@ export const onOrderCreated = onDocumentCreated(
         const tokensSnap = await db.collection("admin_tokens").get();
         const tokens = tokensSnap.docs.map((d) => d.id).filter(Boolean);
         if (tokens.length) {
+          const customerName =
+            String(order.customerName ?? "").trim() || "Cliente";
+          const amount = new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: "COP",
+            maximumFractionDigits: 2,
+          }).format(Number(order.total ?? 0) || 0);
           await messaging.sendEachForMulticast({
             tokens,
             notification: {
-              title: "Nuevo pedido",
-              body: `Pedido #${orderId} - $${order.total}`,
+              title: customerName,
+              body: `${amount} · Nuevo pedido`,
             },
             data: { orderId: String(orderId), type: "new_order" },
           });

@@ -8,8 +8,9 @@ import { WhatsappFloat } from "@/components/whatsapp-float";
 import { VisitTracker } from "@/components/visit-tracker";
 import { Toaster } from "@/components/ui/toaster";
 import { getStoreConfig, getCatalogs } from "@/lib/serverData";
-import { getPalette } from "@/lib/palette";
+import { getPalette, hexToHsl } from "@/lib/palette";
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -69,6 +70,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [config, catalogs] = await Promise.all([getStoreConfig(), getCatalogs()]);
   const palette = getPalette(config);
+  // Los botones usan `bg-primary` de Tailwind (variable --primary, antes azul
+  // fijo). Inyectamos el color primario del tema para que el "Color primario"
+  // que se configura en la APK también pinte los botones de la web.
+  const primaryHsl = hexToHsl(palette.primary);
+  const themeVars = primaryHsl
+    ? ({ "--primary": primaryHsl, "--ring": primaryHsl } as CSSProperties)
+    : undefined;
 
   // Catálogo activo (el pie muestra los que no se están viendo).
   const activeCatalogs = (catalogs ?? [])
@@ -90,7 +98,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="es">
       <body
         className="min-h-screen text-foreground antialiased"
-        style={{ background: palette.background, color: palette.text }}
+        style={{ background: palette.background, color: palette.text, ...themeVars }}
       >
         <AuthProvider>
           <CustomerProvider>

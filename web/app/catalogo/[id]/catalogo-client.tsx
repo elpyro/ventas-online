@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { useCart } from "@/lib/cart";
+import { useCart, cartKey } from "@/lib/cart";
 import { toast } from "@/hooks/use-toast";
 import { matchesProduct } from "@/lib/search";
 import type { Product, ProductSort } from "@/lib/types";
@@ -23,6 +23,8 @@ import {
   X,
   ArrowUpDown,
   Star,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,7 +49,7 @@ export default function CatalogoClient({
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<ProductSort>("displayOrder");
-  const { addItem, items } = useCart();
+  const { addItem, items, updateQty } = useCart();
 
   useEffect(() => {
     if (!id) return;
@@ -98,6 +100,14 @@ export default function CatalogoClient({
       description: `${p.name} · ${cop.format(p.price)}`,
       variant: "success",
     });
+  }
+
+  function handleRemoveOne(p: Product) {
+    // Solo aplica a productos sin variantes: una única línea con clave "SKU".
+    const added = items
+      .filter((i) => i.sku === p.sku)
+      .reduce((sum, i) => sum + i.quantity, 0);
+    updateQty(cartKey(p.sku), added - 1);
   }
 
   if (loading) {
@@ -204,7 +214,6 @@ export default function CatalogoClient({
             const available = productAvailable(p);
             const hasVariants = Boolean(p.variants?.length);
             const limitReached = available && !hasVariants && added >= stock;
-            const canAdd = available && !limitReached;
             const href = `/producto/${encodeURIComponent(p.sku)}?catalogo=${encodeURIComponent(id)}`;
 
             return (
@@ -281,21 +290,56 @@ export default function CatalogoClient({
                         {available ? "Elegir opciones" : "Ver detalle"}
                       </Link>
                     </Button>
-                  ) : (
+                  ) : !available ? (
                     <Button
                       data-testid={`add-${p.sku}`}
-                      disabled={!canAdd}
+                      disabled
+                      variant="secondary"
+                      className="h-9 w-full rounded-xl text-xs sm:text-sm"
+                    >
+                      Agotado
+                    </Button>
+                  ) : added === 0 ? (
+                    <Button
+                      data-testid={`add-${p.sku}`}
                       onClick={() => handleAdd(p)}
                       className="h-9 w-full rounded-xl text-xs sm:text-sm"
-                      variant={canAdd ? "default" : "secondary"}
                     >
-                      <ShoppingCart className="h-4 w-4" />
-                      {!available
-                        ? "Agotado"
-                        : limitReached
-                          ? "Máx. en carrito"
-                          : "Agregar"}
+                      <Plus className="h-4 w-4" />
+                      Agregar
                     </Button>
+                  ) : (
+                    <div
+                      className="flex h-9 w-full items-stretch overflow-hidden rounded-xl border border-primary/40 bg-primary/5"
+                      role="group"
+                      aria-label={`Cantidad de ${p.name}`}
+                    >
+                      <button
+                        type="button"
+                        aria-label="Quitar uno"
+                        data-testid={`dec-${p.sku}`}
+                        onClick={() => handleRemoveOne(p)}
+                        className="flex w-11 items-center justify-center text-primary transition-colors hover:bg-primary/10"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span
+                        data-testid={`qty-${p.sku}`}
+                        className="flex flex-1 items-center justify-center text-sm font-bold"
+                      >
+                        {added}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Agregar uno más"
+                        data-testid={`inc-${p.sku}`}
+                        disabled={limitReached}
+                        onClick={() => handleAdd(p)}
+                        className="flex w-11 items-center justify-center text-primary transition-colors hover:bg-primary/10 disabled:opacity-30"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

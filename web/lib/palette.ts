@@ -36,6 +36,34 @@ export const defaultPalette = {
 
 export type Palette = typeof defaultPalette;
 
+/**
+ * Convierte `#RGB`/`#RRGGBB` al triplete "H S% L%" que esperan las variables
+ * CSS de Tailwind (`hsl(var(--primary))`). Devuelve null si el hex no es válido.
+ */
+export function hexToHsl(hex: string): string | null {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let hue = 0;
+  if (d !== 0) {
+    if (max === r) hue = ((g - b) / d) % 6;
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+  }
+  return `${Math.round(hue)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
 /** Mezcla los valores base con el tema guardado en `store_config` (si existe). */
 export function getPalette(config?: any): Palette {
   const t = config ?? {};

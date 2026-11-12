@@ -17,6 +17,7 @@ import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { statusLabel } from "@/lib/types";
+import { cop } from "@/lib/palette";
 import { Button } from "@/components/ui/button";
 import {
   Loader2,
@@ -229,7 +230,7 @@ export default function MisPedidosClient() {
           {orders.map((o) => (
             <div key={o.id} className="rounded-2xl border bg-white p-4 shadow-sm">
               <p className="font-semibold">Pedido #{o.id}</p>
-              <p className="text-sm text-muted-foreground">{statusLabel(o.status)} · ${o.total}</p>
+              <p className="text-sm text-muted-foreground">{statusLabel(o.status)} · {cop.format(o.total)}</p>
               {o.pdfPath && (
                 <button
                   onClick={() => openPdf(o.id)}
@@ -323,7 +324,7 @@ export default function MisPedidosClient() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold">${order.total.toFixed(2)}</p>
+                      <p className="text-lg font-bold">{cop.format(order.total)}</p>
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
                         {statusLabel(order.status)}
                       </span>
@@ -399,19 +400,19 @@ export default function MisPedidosClient() {
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            {it.sku} · ${it.unitPrice.toFixed(2)} c/u
+                            {it.sku} · {cop.format(it.unitPrice)} c/u
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-muted-foreground">x{it.quantity}</p>
-                          <p className="font-semibold">${it.subtotal.toFixed(2)}</p>
+                          <p className="font-semibold">{cop.format(it.subtotal)}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                   <div className="flex items-center justify-between border-t pt-3">
                     <span className="text-muted-foreground">Total</span>
-                    <span className="text-2xl font-extrabold">${found.total.toFixed(2)}</span>
+                    <span className="text-2xl font-extrabold">{cop.format(found.total)}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Entrega en: {found.deliveryAddress}
