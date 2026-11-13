@@ -34,7 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily" as const,
       priority: 0.8,
     })),
-    ...products.slice(0, 500).map((p: any) => ({
+    ...products.map((p: any) => ({
       url: `${BASE_URL}/producto/${encodeURIComponent(String(p.sku ?? ""))}`,
       lastModified: p.updatedAt ? new Date(p.updatedAt) : now,
       changeFrequency: "weekly" as const,

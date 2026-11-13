@@ -40,12 +40,15 @@ const cop = new Intl.NumberFormat("es-CO", {
 export default function CatalogoClient({
   id,
   catalogTitle,
+  initialProducts = [],
 }: {
   id: string;
   catalogTitle?: string;
+  /** Productos precargados en servidor: el grid viene ya en el HTML (SEO/IA). */
+  initialProducts?: Product[];
 }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<ProductSort>("displayOrder");
@@ -53,7 +56,7 @@ export default function CatalogoClient({
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
+    // Refresco silencioso en segundo plano cuando ya vienen precargados.
     setError("");
     (async () => {
       try {
@@ -66,11 +69,15 @@ export default function CatalogoClient({
         setProducts(sortProducts(list, "displayOrder"));
       } catch (e: unknown) {
         console.error(e);
-        setError("No se pudieron cargar los productos. Revisa la conexión.");
+        // Datos precargados siguen siendo válidos; solo avisamos si no había nada.
+        if (products.length === 0) {
+          setError("No se pudieron cargar los productos. Revisa la conexión.");
+        }
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const filtered = useMemo(() => {

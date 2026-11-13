@@ -124,9 +124,10 @@ export async function getProduct(sku: string) {
 
 /**
  * Lista todos los productos (para búsqueda y sitemap).
- * El tope evita cargar catálogos gigantes de golpe.
+ * El tope evita cargar catálogos gigantes de golpe; el catálogo real
+ * ya supera los 500 productos, por eso el límite es 1500.
  */
-export async function getAllProducts(limit = 500) {
+export async function getAllProducts(limit = 1500) {
   try {
     const body = {
       structuredQuery: {

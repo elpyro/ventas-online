@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getCatalog, getProductsByCatalog } from "@/lib/serverData";
+import { sortProducts } from "@/lib/types";
+import type { Product } from "@/lib/types";
 import CatalogoClient from "./catalogo-client";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +62,9 @@ export default async function Page({
     notFound();
   }
 
-  const products = (await getProductsByCatalog(id)) ?? [];
+  const rawProducts = (await getProductsByCatalog(id)) ?? [];
+  // Mismo orden y visibilidad que aplica el cliente: el HTML SSR ya muestra el grid.
+  const products = sortProducts(rawProducts as Product[], "displayOrder");
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -115,7 +119,11 @@ export default async function Page({
           __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
         }}
       />
-      <CatalogoClient id={id} catalogTitle={String(catalog.title ?? id)} />
+      <CatalogoClient
+        id={id}
+        catalogTitle={String(catalog.title ?? id)}
+        initialProducts={products}
+      />
     </>
   );
 }
