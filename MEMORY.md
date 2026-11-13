@@ -1,6 +1,6 @@
 ﻿# Memoria del proyecto — Ventas Online
 
-Última actualización: 2026-11-11
+Última actualización: 2026-11-12
 Estado cambiante. Las reglas estables viven en `AGENTS.md`.
 Actualizar solo en hitos importantes, no en cada conversación.
 
@@ -9,12 +9,23 @@ Actualizar solo en hitos importantes, no en cada conversación.
 - Proyecto Firebase: `ventas-online-ec`. CLI fijado con `firebase use ventas-online-ec`.
 - **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
   Flujo: `git add . && git commit -m "..." && git push`.
-- **Producción**: Functions (9) y reglas Firestore/Storage desplegadas; la web
-  todavía NO está publicada (Hosting sin releases). `WEBHOOK_SECRET` YA está
+- **Producción**: Functions (9) y reglas Firestore/Storage desplegadas. `WEBHOOK_SECRET` YA está
   configurado en `functions/.env` y `webhookSku` desplegado con él (verificado:
   401 sin secret, 200 con secret, actualización parcial intacta). Faltan
   `RESEND_API_KEY`/`RESEND_FROM`: no salen correos de pedidos.
   El secret solo vive en `functions/.env` (ignorado por git); nunca en chats.
+- **La web ya está publicada en Netlify** (patrón elegido: Vercel Pro descartado por costo,
+  Firebase Hosting descartado por el experimento `webframeworks`). Sitio:
+  `https://celtoons.netlify.app`, deploys automáticos desde `main` (base `web`,
+  publish `web/.next`, runtime **Next.js** configurado a mano). `celtoons.com`
+  (Spaceship, A → 75.2.60.5, `www` → CNAME a netlify.app): el apex y `www` ya
+  responden HTTP; Netlify avisa **hasta 24 h** para emitir el certificado HTTPS —
+  mientras tanto no usar el dominio para publicidad. `NEXT_PUBLIC_SITE_URL=https://celtoons.com`
+  ya está en las variables de Netlify, así que sitemap/robots/llms.txt/canonical
+  ya apuntan al dominio real. **Ojo Netlify**: no marcar variables como Secret
+  (las `NEXT_PUBLIC_*` van dentro del bundle; el escáner de secretos tumba el build),
+  y Next se actualizó 15.0.0 → **15.5.29** porque Netlify bloquea versiones con
+  CVE crítica.
 - Emuladores (Functions + Firestore + Storage) funcionando en 4000 / 8080 / 5001 / 9199.
   Para que el CLI alcance a cargar las Functions: `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"`
   (si no, falla con "Cannot determine backend specification. Timeout after 10000").
@@ -31,9 +42,12 @@ Actualizar solo en hitos importantes, no en cada conversación.
   ADC: `gcloud auth application-default login` con ecbt9Claret@gmail.com (owner
   del proyecto). REST sin `?key=` dio un 403 transitorio tras la escritura masiva;
   se recuperó solo.
-- Web de producción corriendo en http://localhost:3001 (`next start`, build nuevo).
-  OJO: `getAllProducts(limit = 500)` en `web/lib/serverData.ts` y producción ya
-  tiene **786** documentos en `products`: el catálogo de la web se corta en 500.
+- Web de producción corriendo en http://localhost:3001 (`next start`, build con Next 15.5.29).
+  `getAllProducts(limit = 1500)` en `web/lib/serverData.ts` (antes 500): producción ya
+  tiene **786** documentos en `products` y ahora el sitemap/llms.txt/búsqueda los listan todos.
+- **Listado `/catalogo/[id]` ya es SSR**: el grid viaja en el HTML (430 enlaces a fichas
+  en el SSR de `/catalogo/tecnologiaymas`); el cliente refresca en silencio tras hidratar.
+  Antes cargaba solo en cliente y los bots de IA no veían los productos.
 - Web de emulador en http://localhost:3002 (`next dev`, `NEXT_PUBLIC_USE_EMULATORS=true`).
 - Emulador con datos de PRODUCCIÓN (copiados por `npm --prefix functions run copy:prod`).
 
@@ -137,15 +151,20 @@ Actualizar solo en hitos importantes, no en cada conversación.
 1. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
    redesplegar `onOrderCreated`: sin esos secretos no salen correos de
    pedidos. (`WEBHOOK_SECRET` ya está hecho y verificado.)
-2. Publicar la web (Hosting o Vercel) y fijar `NEXT_PUBLIC_SITE_URL` real.
-3. Subir el límite de `getAllProducts` (500) o paginar: producción ya tiene 786
-   productos y la web solo muestra los primeros 500.
-4. Tests de reglas/Functions, CI y proyecto `dev` separado.
-5. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
-6. Probar la subida de fotos/video desde el APK contra los emuladores
+2. ~~Publicar la web y fijar `NEXT_PUBLIC_SITE_URL`~~ HECHO (2026-11-12):
+   publicada en Netlify (`celtoons.netlify.app`), `NEXT_PUBLIC_SITE_URL=https://celtoons.com`
+   ya puesto; falta que Netlify emita el cert HTTPS de `celtoons.com` (avisó hasta
+   24 h; verificar el correo de Spaceship o ICANN suspende el dominio).
+3. ~~Subir el límite de `getAllProducts`~~ HECHO (2026-11-12): default 1500.
+4. Registro en Google Search Console y Bing Webmaster Tools (sitemap.xml);
+   Google Business Profile (Bogotá). Es lo que acelera el descubrimiento por
+   Gemini (Google) y ChatGPT Search (Bing).
+5. Tests de reglas/Functions, CI y proyecto `dev` separado.
+6. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
+7. Probar la subida de fotos/video desde el APK contra los emuladores
    (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).
-7. Migrar el listado del catálogo a Server Components (la ficha ya es SSR).
-8. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
+8. ~~Migrar el listado del catálogo a Server Components~~ HECHO (2026-11-12).
+9. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
    desde el APK o borrarlos cuando haya productos reales para ellos.
 
 ## Decisiones
@@ -172,5 +191,10 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Próximo paso
 
-Antes de producción: configurar `functions/.env`, limpiar datos demo, publicar la
-web con `NEXT_PUBLIC_SITE_URL` real y firmar el APK.
+1. Esperar el cert HTTPS de `celtoons.com` en Netlify; entonces marcar
+   `celtoons.com` como dominio primario (www → apex).
+2. Verificar el correo del ticket de Spaceship (ICANN suspende el dominio a los
+   ~15 días si no se confirma).
+3. Search Console + Bing Webmaster Tools: verificar el dominio y enviar sitemap.xml;
+   después Google Business Profile.
+4. Configurar `functions/.env` (RESEND), limpiar datos demo y firmar el APK.
