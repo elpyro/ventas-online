@@ -5,7 +5,7 @@ import { useCart, cartKey } from "@/lib/cart";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Product, ProductVariant } from "@/lib/types";
-import { productStock, effectivePrice, variantLabel, productAvailable } from "@/lib/types";
+import { productStock, effectivePrice, productAvailable } from "@/lib/types";
 import { ProductGallery, type GalleryMedia } from "@/components/product-gallery";
 import { ShareProductButton } from "@/components/share-product-button";
 import { Badge } from "@/components/ui/badge";
@@ -172,14 +172,6 @@ export default function ProductDetailClient({
     } else {
       updateQty(cartKey(product.sku, selectedVariant?.id), qty);
     }
-
-    toast({
-      title: delta > 0 ? "Agregado al carrito" : "Carrito actualizado",
-      description: `${qty} × ${product.name}${
-        selectedVariant ? ` · ${variantLabel(selectedVariant)}` : ""
-      }`,
-      variant: "success",
-    });
   }
 
   const media: GalleryMedia[] = [
@@ -338,7 +330,7 @@ export default function ProductDetailClient({
                 <button
                   aria-label="Menos"
                   onClick={() => setQty(Math.max(1, qty - 1))}
-                  className="h-12 w-12 text-lg font-semibold transition-colors hover:bg-muted disabled:opacity-40"
+                  className="h-12 w-12 rounded-l-xl text-lg font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
                   disabled={qty <= 1}
                 >
                   −
@@ -358,7 +350,7 @@ export default function ProductDetailClient({
                 <button
                   aria-label="Más"
                   onClick={() => setQty(Math.min(limit, qty + 1))}
-                  className="h-12 w-12 text-lg font-semibold transition-colors hover:bg-muted disabled:opacity-40"
+                  className="h-12 w-12 rounded-r-xl text-lg font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
                   disabled={limit === 0 || qty >= limit}
                 >
                   +

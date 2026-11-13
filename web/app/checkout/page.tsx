@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import CheckoutClient from "./checkout-client";
 
 export const metadata: Metadata = {
-  title: "Checkout",
+  title: "Confirmación",
   description:
     "Completa tus datos y confirma tu pedido mayorista. Coordinamos la entrega y el pago por WhatsApp.",
   alternates: { canonical: "/checkout" },

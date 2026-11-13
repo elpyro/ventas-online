@@ -1,6 +1,9 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Product, ProductVariant, effectivePrice, variantLabel } from "./types";
+import { Product, ProductVariant, effectivePrice, variantLabel, cartKey } from "./types";
+
+// Reexportada desde ./types para no romper los imports existentes (@/lib/cart).
+export { cartKey };
 
 export interface CartItem {
   /** Clave estable: "SKU" o "SKU::variantId". */
@@ -15,10 +18,6 @@ export interface CartItem {
   variantLabel?: string;
   /** Nota opcional del cliente para este producto. */
   note?: string;
-}
-
-export function cartKey(sku: string, variantId?: string): string {
-  return variantId ? `${sku}::${variantId}` : sku;
 }
 
 interface CartContextValue {
@@ -164,7 +163,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           })),
         });
       } catch {
-        // El borrador es opcional: si falla, el checkout igual crea el pedido.
+        // El borrador es opcional: si falla, la confirmación igual crea el pedido.
       }
     }, 600);
     return () => clearTimeout(t);

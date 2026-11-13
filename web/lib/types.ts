@@ -1,3 +1,8 @@
+/** Clave estable del carrito: "SKU" o "SKU::variantId". */
+export function cartKey(sku: string, variantId?: string): string {
+  return variantId ? `${sku}::${variantId}` : sku;
+}
+
 export interface ProductVariant {
   /** Identificador estable dentro del producto (ej. "negro-m"). */
   id: string;

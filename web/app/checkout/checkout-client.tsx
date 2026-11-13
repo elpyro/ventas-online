@@ -140,15 +140,6 @@ export default function CheckoutPage() {
     return null;
   }
 
-  function buildWhatsAppText(orderId: string, orderTotal: number) {
-    const summary = items
-      .map((i) => `${i.name} x${i.quantity} = ${cop.format(i.price * i.quantity)}`)
-      .join("\n");
-    return encodeURIComponent(
-      `Pedido #${orderId}\n${customer.name}\n${customer.phone}\n${customer.email}\n${customer.address}\n\n${summary}\n\nTotal: ${cop.format(orderTotal)}`
-    );
-  }
-
   async function handleConfirm() {
     setError("");
     const v = validate();
@@ -186,17 +177,10 @@ export default function CheckoutPage() {
         itemCount = response.data.itemCount;
       } catch (e: any) {
         // `createOrder` es la única vía autorizada para crear pedidos
-        // (las reglas rechazan `addDoc` directo en `orders`). Si Functions
-        // no responde, mostramos el detalle real en vez de un genérico.
-        const code = e?.code ?? "";
-        if (code === "functions/not-found") {
-          throw new Error(
-            "La función de pedidos no está desplegada en producción. Despliega Functions con `firebase deploy --only functions,firestore:rules` y reintenta."
-          );
-        }
-        throw new Error(
-          code ? `${code}: ${e?.message ?? "Error al crear pedido"}` : (e?.message ?? "Error al crear pedido")
-        );
+        // (las reglas rechazan `addDoc` directo en `orders`). El detalle real
+        // queda en consola; a la persona no se le muestran códigos internos.
+        console.error("createOrder failed", e);
+        throw new Error("No se pudo crear el pedido. Intenta de nuevo en unos minutos.");
       }
 
       // Registra al cliente en este navegador para próximas compras.
@@ -226,7 +210,7 @@ export default function CheckoutPage() {
       }
 
       const waPhone = (config?.phoneContact ?? "").replace(/\D/g, "");
-      const text = buildWhatsAppText(orderId, orderTotal);
+      const text = encodeURIComponent("Hola, acabo de hacer un pedido");
       clear();
 
       toast({
@@ -276,29 +260,26 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        <p className="mt-6 text-sm text-muted-foreground">
-          Si lo deseas, envía la confirmación por WhatsApp; si no, puedes cerrar esta
-          pantalla y te contactamos para coordinar.
-        </p>
-        <div className="mt-3 flex w-full flex-col gap-2 sm:flex-row">
-          <Button asChild size="lg" className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700">
+        <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row">
+          <Button asChild size="lg" className="h-14 flex-1 text-base font-bold shadow-lg shadow-primary/30">
             <a href={done.whatsappUrl} target="_blank" rel="noreferrer" data-testid="whatsapp-confirm">
-              <MessageCircle className="h-5 w-5" />
+              <MessageCircle className="h-6 w-6" />
               Enviar por WhatsApp
             </a>
           </Button>
-          <Button asChild size="lg" variant="outline" className="flex-1">
+          <Button asChild size="lg" variant="outline" className="h-14 flex-1 border-primary/40 text-base font-bold text-primary hover:bg-primary/5">
             <Link href="/mis-pedidos">
               Ver mis pedidos
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-5 w-5" />
             </Link>
           </Button>
         </div>
         <button
           onClick={() => router.push("/catalogos")}
-          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
+          className="mt-4 inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary/10 px-6 text-base font-bold text-primary transition-colors hover:bg-primary/15 sm:w-auto"
         >
-          Seguir comprando →
+          Seguir comprando
+          <ArrowRight className="h-5 w-5" />
         </button>
         <p className="mt-6 text-xs text-muted-foreground">
           Tus datos quedaron guardados en este navegador para tus próximas compras.
@@ -331,7 +312,7 @@ export default function CheckoutPage() {
     return (
       <div className="mx-auto flex max-w-2xl items-center justify-center gap-3 px-4 py-24 text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
-        Cargando checkout…
+        Cargando confirmación…
       </div>
     );
   }
@@ -352,7 +333,7 @@ export default function CheckoutPage() {
     <main className="mx-auto max-w-2xl px-4 py-8">
       <div className="flex items-center gap-2">
         <PackageCheck className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Checkout</h1>
+        <h1 className="text-2xl font-bold">Confirmación</h1>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Completa tus datos. Al confirmar, guardamos tu pedido en esta tienda.
@@ -413,7 +394,7 @@ export default function CheckoutPage() {
         </div>
         <Button
           size="lg"
-          className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+          className="w-full"
           onClick={handleConfirm}
           disabled={submitting}
         >

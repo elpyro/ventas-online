@@ -1,10 +1,27 @@
 ﻿# Memoria del proyecto — Ventas Online
 
-Última actualización: 2026-11-12
+Última actualización: 2026-11-13
 Estado cambiante. Las reglas estables viven en `AGENTS.md`.
 Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Estado actual
+
+- **AUDITORÍA DE SEGURIDAD 2026-11-13 (sin desplegar todavía)**: doce chequeos revisados;
+  correcciones en `functions/src/index.ts` (PII fuera de `getOrderDetails`, `getOrdersByPhone` 30/5min
+  + 200/hora y oculta borradores `selecting`, `saveSelectingDraft` con regex de `clientKey` + throttle,
+  `webhookSku` sin CORS + `timingSafeEqual`, HTML del correo con `escapeHtml`, fallback público
+  `makePublic()` ELIMINADO — el PDF nunca se hace público, Gemini solo por env/`private_config`,
+  `maxInstances: 20` en funciones públicas) y en `web/` (cabeceras nosniff/DENY/Referrer-Policy/
+  Permissions-Policy/HSTS 1 año sin preload, `images.remotePatterns` restringido, login con errores
+  genéricos, checkout sin filtrar códigos internos, `/api/search?q` truncado a 80, Mis pedidos con
+  dirección desde `localStorage`). Verificado: builds OK, 32 tests functions, webhook:test 18/18,
+  emulador 15/15 checks, web 20/20 checks, APK en el Redmi contra emulador (login admin@ventas.test OK;
+  PDF autenticado devuelve `FAILED_PRECONDITION` — ya NO se pone público). **Sin deploy**: falta tu OK.
+  Ojo: el APK llama a las Functions HTTP con URL de prod hardcodeada (`getOrderPdfUrl`,
+  `generateProductDescription`), sin interruptor de emulador; y cambiar solo `--dart-define` no
+  recompila el kernel de Dart → quitarlo requiere `flutter clean` y recompilar.
+  El emulador se reinició durante la auditoría y se re-sembró (copia de prod + demo); puede quedar
+  un pedido de prueba "CLIENTE PRUEBA AUDITORIA".
 
 - Proyecto Firebase: `ventas-online-ec`. CLI fijado con `firebase use ventas-online-ec`.
 - **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
@@ -159,7 +176,10 @@ Actualizar solo en hitos importantes, no en cada conversación.
 4. Registro en Google Search Console y Bing Webmaster Tools (sitemap.xml);
    Google Business Profile (Bogotá). Es lo que acelera el descubrimiento por
    Gemini (Google) y ChatGPT Search (Bing).
-5. Tests de reglas/Functions, CI y proyecto `dev` separado.
+5. CI y proyecto `dev` separado. (Tests unitarios básicos YA hechos el 2026-11-13:
+   web con Vitest — `search`, `types`, `palette`, `cartKey` —; functions con Vitest
+   — helpers extraídos a `src/helpers.ts` —; admin con `flutter test` — `CopFormat`,
+   `SearchNormalizer`. Falta: pruebas de reglas de Firestore y CI.)
 6. Firmar el APK con keystore propio (hoy usa la clave debug) y subir `versionCode`.
 7. Probar la subida de fotos/video desde el APK contra los emuladores
    (`--dart-define=USE_EMULATORS=true`; el interruptor ya existe).

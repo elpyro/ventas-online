@@ -39,8 +39,6 @@ type OrderSummary = {
 
 type OrderDetails = {
   orderId: string;
-  customerName: string;
-  deliveryAddress: string;
   status: string;
   total: number;
   itemCount: number;
@@ -415,7 +413,7 @@ export default function MisPedidosClient() {
                     <span className="text-2xl font-extrabold">{cop.format(found.total)}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Entrega en: {found.deliveryAddress}
+                    Entrega en: {savedCustomer?.address ?? "—"}
                   </p>
                 </div>
               </div>

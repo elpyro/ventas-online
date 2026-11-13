@@ -196,14 +196,20 @@ export function SiteFooter({
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-slate-800 pt-6 text-xs text-slate-500 sm:flex-row">
           <p>© {new Date().getFullYear()} {companyName}. Todos los derechos reservados.</p>
-          <nav className="flex gap-4">
-            <Link href="/catalogos" className="transition-colors hover:text-white">
+          <nav className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Link
+              href="/privacidad"
+              className="rounded-full border border-slate-600 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition-colors hover:border-slate-400 hover:text-white"
+            >
+              Política de privacidad
+            </Link>
+            <Link href="/catalogos" className="px-2 transition-colors hover:text-white">
               Catálogos
             </Link>
-            <Link href="/carrito" className="transition-colors hover:text-white">
+            <Link href="/carrito" className="px-2 transition-colors hover:text-white">
               Carrito
             </Link>
-            <Link href="/login" className="transition-colors hover:text-white">
+            <Link href="/login" className="px-2 transition-colors hover:text-white">
               Ingresar
             </Link>
           </nav>

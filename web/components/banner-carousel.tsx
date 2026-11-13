@@ -3,24 +3,63 @@ import { useEffect, useRef, useState } from "react";
 
 export function BannerCarousel({ banners }: { banners: any[] }) {
   const [index, setIndex] = useState(0);
-  const timer = useRef<number | null>(null);
+  // El carrusel se detiene mientras lo estás leyendo: con el foco puesto
+  // (Tab), con click/tap sostenido, o con el mouse encima.
+  const [paused, setPaused] = useState(false);
+  const focusRef = useRef(false);
+  const pressRef = useRef(false);
+  const hoverRef = useRef(false);
+
+  const updatePaused = () =>
+    setPaused(focusRef.current || pressRef.current || hoverRef.current);
 
   useEffect(() => {
-    if (banners.length <= 1) return;
-    timer.current = window.setInterval(() => {
+    if (banners.length <= 1 || paused) return;
+    const id = window.setInterval(() => {
       setIndex((i) => (i + 1) % banners.length);
     }, 4000);
-    return () => {
-      if (timer.current) window.clearInterval(timer.current);
-    };
-  }, [banners.length]);
+    return () => window.clearInterval(id);
+  }, [banners.length, paused]);
 
   if (banners.length === 0) return null;
 
   const go = (i: number) => setIndex(((i % banners.length) + banners.length) % banners.length);
 
+  const endPress = () => {
+    pressRef.current = false;
+    updatePaused();
+  };
+
   return (
-    <div className="relative overflow-hidden rounded-lg">
+    <div
+      className="relative overflow-hidden rounded-lg"
+      onFocusCapture={() => {
+        focusRef.current = true;
+        updatePaused();
+      }}
+      onBlurCapture={(e) => {
+        // Solo reanuda cuando el foco sale del carrusel por completo.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          focusRef.current = false;
+          updatePaused();
+        }
+      }}
+      onPointerDown={() => {
+        pressRef.current = true;
+        updatePaused();
+      }}
+      onPointerUp={endPress}
+      onPointerCancel={endPress}
+      onPointerLeave={endPress}
+      onMouseEnter={() => {
+        hoverRef.current = true;
+        updatePaused();
+      }}
+      onMouseLeave={() => {
+        hoverRef.current = false;
+        updatePaused();
+      }}
+    >
       <div
         className="flex transition-transform duration-500 ease-in-out"
         style={{ transform: `translateX(-${index * 100}%)` }}

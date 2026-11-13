@@ -67,11 +67,11 @@ export default async function Home() {
   const defaultFaqs: Faq[] = [
     {
       q: "¿Cómo compro?",
-      a: "Elige un catálogo, agrega productos al carrito y completa el checkout con nombre, teléfono, correo y dirección. Un asesor coordina el pago y la entrega por WhatsApp.",
+      a: "Elige un catálogo, agrega productos al carrito y completa la confirmación con nombre, teléfono, correo y dirección. Un asesor coordina el pago y la entrega por WhatsApp.",
     },
     {
       q: "¿Cuál es la compra mínima?",
-      a: `La compra mínima global es ${minOrder}. Cada catálogo puede tener su propio mínimo y el checkout te avisa cuánto falta.`,
+      a: `La compra mínima global es ${minOrder}. Cada catálogo puede tener su propio mínimo y la página de confirmación te avisa cuánto falta.`,
     },
     {
       q: "¿Hacen envíos a todo el país?",
@@ -162,21 +162,19 @@ export default async function Home() {
       {/* Encabezado principal */}
       <section
         className="border-b text-white"
-        style={{
-          background: `linear-gradient(to bottom right, ${palette.primary} 0%, ${palette.primaryDark} 55%, #0F172A 100%)`,
-        }}
+        style={{ background: palette.primaryDark }}
       >
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:gap-10">
+        <div className="mx-auto max-w-6xl px-4 py-3 sm:py-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-8">
             {/* Buscador: arriba en móvil, a la derecha en desktop */}
             <div className="order-1 w-full md:order-2 md:w-[42%] md:shrink-0">
               <HomeSearch catalogs={searchCatalogs} />
             </div>
             <div className="order-2 flex-1 md:order-1">
-              <h1 className="max-w-2xl text-3xl font-extrabold leading-tight sm:text-4xl">
+              <h1 className="max-w-2xl text-2xl font-extrabold leading-tight sm:text-4xl">
                 {config?.companyName ?? "Ventas Online"}
               </h1>
-              <p className="mt-3 max-w-xl text-white/85">
+              <p className="mt-2 max-w-xl text-sm sm:text-base text-white/85">
                 {String(
                   config?.slogan ??
                     `Catálogo mayorista con entrega en ${config?.city ?? "tu ciudad"}. Compra mínima global: $${Number(config?.globalMinOrder ?? 0).toFixed(2)}.`

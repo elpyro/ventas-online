@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase-admin/app";
+﻿import { initializeApp } from "firebase-admin/app";
 import {
   DocumentReference,
   DocumentSnapshot,
@@ -7,9 +7,11 @@ import {
 } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { getMessaging } from "firebase-admin/messaging";
+import { createHash, timingSafeEqual } from "crypto";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
+import { roundMoney, cleanText, isValidEmail, normalizePhone, normalizeVariants, variantDisplayLabel, parseItems, normalizeSku, normalizeSkuDashed, escapeHtml, hitRateLimit, pruneRateLimitBucket, CLIENT_KEY_REGEX, RawVariant } from "./helpers";
 
 initializeApp();
 
@@ -17,157 +19,18 @@ const db = getFirestore();
 const storage = getStorage();
 const messaging = getMessaging();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// Límite en memoria por instancia (ver hitRateLimit). Freno de coste/abuso,
+// no un muro perfecto entre instancias.
+const rateBuckets = new Map<string, number[]>();
+const RATE_WINDOW_5M = 5 * 60_000;
+const RATE_WINDOW_1H = 60 * 60_000;
+const RATE_MAX_5M = 30;   // ráfaga
+const RATE_MAX_1H = 200;  // sostenido
 
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function cleanText(value: unknown, maxLength: number): string {
-  if (typeof value !== "string") return "";
-  return value.trim().slice(0, maxLength);
-}
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-/** Acepta "+57 312 586 6072", "3125866072", etc. Devuelve "+<digitos>". */
-function normalizePhone(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const digits = value.replace(/\D/g, "");
-  if (digits.length < 7 || digits.length > 15) return "";
-  return `+${digits}`;
-}
-
-type RawOrderItem = {
-  sku?: unknown;
-  quantity?: unknown;
-  catalogId?: unknown;
-  variantId?: unknown;
-  note?: unknown;
-};
-
-type OrderItemInput = {
-  sku: string;
-  quantity: number;
-  catalogId: string;
-  variantId?: string;
-  note?: string;
-};
-
-type RawVariant = {
-  id: string;
-  color?: string;
-  size?: string;
-  colorHex?: string;
-  price?: number;
-  stock: number;
-};
-
-/** Normaliza las variantes leídas desde Firestore (datos confiables del servidor). */
-function normalizeVariants(raw: unknown): RawVariant[] {
-  if (!Array.isArray(raw)) return [];
-  const out: RawVariant[] = [];
-  for (const value of raw) {
-    if (!value || typeof value !== "object") continue;
-    const o = value as Record<string, unknown>;
-    const id = cleanText(o.id, 80);
-    const stockRaw = typeof o.stock === "number" ? o.stock : Number(o.stock);
-    if (!id || !Number.isFinite(stockRaw) || stockRaw < 0) continue;
-    const color = cleanText(o.color, 40);
-    const size = cleanText(o.size, 40);
-    const colorHex = cleanText(o.colorHex, 20);
-    const priceRaw = typeof o.price === "number" ? o.price : Number(o.price);
-    const price =
-      Number.isFinite(priceRaw) && priceRaw >= 0 ? priceRaw : undefined;
-    out.push({
-      id,
-      stock: stockRaw,
-      ...(color ? { color } : {}),
-      ...(size ? { size } : {}),
-      ...(colorHex ? { colorHex } : {}),
-      ...(price !== undefined ? { price } : {}),
-    });
-  }
-  return out;
-}
-
-function variantDisplayLabel(variant: RawVariant): string {
-  return [variant.color, variant.size].filter(Boolean).join(" / ");
-}
-
-function parseItems(raw: unknown): OrderItemInput[] {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new HttpsError("invalid-argument", "El carrito está vacío.");
-  }
-  if (raw.length > 50) {
-    throw new HttpsError("invalid-argument", "El pedido tiene demasiados productos.");
-  }
-
-  const merged = new Map<string, OrderItemInput>();
-
-  for (const value of raw) {
-    const item = (value ?? {}) as RawOrderItem;
-    const sku = cleanText(item.sku, 120);
-    const catalogId = cleanText(item.catalogId, 120);
-    const variantId = cleanText(item.variantId, 80);
-    const note = cleanText(item.note, 200);
-    const quantity = typeof item.quantity === "number" ? item.quantity : Number(item.quantity);
-
-    if (!sku || !catalogId) {
-      throw new HttpsError("invalid-argument", "Hay un producto inválido en el carrito.");
-    }
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
-      throw new HttpsError("invalid-argument", `Cantidad inválida para ${sku}.`);
-    }
-
-    // Se permite comprar el mismo SKU con variantes distintas: líneas separadas.
-    const mergeKey = variantId ? `${sku}::${variantId}` : sku;
-    const existing = merged.get(mergeKey);
-    if (existing) {
-      existing.quantity += quantity;
-      if (!existing.note && note) existing.note = note;
-    } else {
-      merged.set(mergeKey, {
-        sku,
-        quantity,
-        catalogId,
-        ...(variantId ? { variantId } : {}),
-        ...(note ? { note } : {}),
-      });
-    }
-  }
-
-  return [...merged.values()];
-}
-
-// ---------------------------------------------------------------------------
-// Módulo A: Webhook por SKU
-// ---------------------------------------------------------------------------
-
-/**
- * Normaliza un SKU: los espacios SOLO se eliminan ("A 1" → "A1"). Casi todos
- * los productos se importaron con el SKU sin espacios y el ERP los manda con
- * espacios, así que la regla es quitarlos, no ponerles guion. Las barras
- * siguen siendo guion, como en la migración CELTOONS ("A5511-9/10" → "A5511-9-10").
- */
-function normalizeSku(value: string): string {
-  return value.trim().replace(/\s+/g, "").replace(/\/+/g, "-");
-}
-
-/**
- * Variante con guion ("A 1" → "A-1"): la regla anterior. Se usa como respaldo
- * para los pocos SKUs que en la migración CELTOONS quedaron con guion.
- */
-function normalizeSkuDashed(value: string): string {
-  return value.trim().replace(/\s+/g, "-").replace(/\/+/g, "-");
-}
 
 export const webhookSku = onRequest(
-  { region: "us-central1", cors: true },
+  // Lo llama el ERP servidor-a-servidor: no necesita CORS abierto.
+  { region: "us-central1" },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
@@ -176,7 +39,16 @@ export const webhookSku = onRequest(
 
     const secret = req.headers["x-webhook-secret"];
     const expected = process.env.WEBHOOK_SECRET;
-    if (!expected || secret !== expected) {
+    // Comparación en tiempo constante sobre SHA-256 (no filtra ni el largo).
+    const provided = typeof secret === "string" ? secret : "";
+    const secretOk =
+      expected !== undefined &&
+      expected.length > 0 &&
+      timingSafeEqual(
+        createHash("sha256").update(provided).digest(),
+        createHash("sha256").update(expected).digest()
+      );
+    if (!secretOk) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -197,18 +69,18 @@ export const webhookSku = onRequest(
       return;
     }
 
-    // Guarda el SKU original tal como llegó (con espacios, si los hay)
+    // Guarda el SKU original tal como llegÃ³ (con espacios, si los hay)
     // para el log y la respuesta resolvedFrom.
     const requested = sku.trim();
 
-    // Normaliza el SKU quitando los espacios ("A 1" → "A1"). Siempre buscamos
-    // el SKU canónico: así evitamos crear duplicados invisibles (el incidente
+    // Normaliza el SKU quitando los espacios ("A 1" â†’ "A1"). Siempre buscamos
+    // el SKU canÃ³nico: asÃ­ evitamos crear duplicados invisibles (el incidente
     // del fondo).
     const normalized = normalizeSku(sku);
     const dashed = normalizeSkuDashed(sku);
 
     // Buscamos el SKU normalizado y, si no existe, la variante con guion
-    // (respaldo para los SKUs que quedaron con guion en la migración CELTOONS).
+    // (respaldo para los SKUs que quedaron con guion en la migraciÃ³n CELTOONS).
     // Si no existe ninguno, 404 sin crear nada.
     let snap = await db.collection("products").doc(normalized).get();
     if (!snap.exists && dashed !== normalized) {
@@ -229,7 +101,7 @@ export const webhookSku = onRequest(
     const existingVariants = existingData?.variants;
     const hasVariants = Array.isArray(existingVariants) && existingVariants.length > 0;
 
-    // Fotos, descripción, nombre y precio los administra el APK: el webhook
+    // Fotos, descripciÃ³n, nombre y precio los administra el APK: el webhook
     // no los pisa. Se reportan como ignorados para que quien llama sepa que
     // no surtieron efecto. Blindar nombre y precio evita que un tercero
     // renombre productos o manipule los precios de la tienda.
@@ -240,11 +112,11 @@ export const webhookSku = onRequest(
     if (body.price !== undefined) ignored.push("price");
 
     // El stock de un producto con variantes se recalcula desde ellas: pisarlo
-    // aquí rompería el inventario.
+    // aquÃ­ romperÃ­a el inventario.
     if (hasVariants && stock !== undefined) ignored.push("stock");
 
-    // Solo escribimos los campos que llegan y están permitidos: una
-    // actualización parcial no borra el resto del documento.
+    // Solo escribimos los campos que llegan y estÃ¡n permitidos: una
+    // actualizaciÃ³n parcial no borra el resto del documento.
     const payload: Record<string, unknown> = {
       sku: target.id,
       updatedAt: new Date(),
@@ -261,8 +133,8 @@ export const webhookSku = onRequest(
     }
     if (Array.isArray(catalogIds)) {
       const valid = catalogIds.filter((id) => typeof id === "string" && id !== "");
-      // Un producto sin catálogos desaparece de la web: el webhook nunca lo
-      // deja vacío.
+      // Un producto sin catÃ¡logos desaparece de la web: el webhook nunca lo
+      // deja vacÃ­o.
       if (valid.length > 0) payload.catalogIds = valid;
       else ignored.push("catalogIds");
     }
@@ -287,11 +159,11 @@ export const webhookSku = onRequest(
 );
 
 // ---------------------------------------------------------------------------
-// Módulo B: Crear pedido en el servidor
+// MÃ³dulo B: Crear pedido en el servidor
 // ---------------------------------------------------------------------------
 
 export const createOrder = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", maxInstances: 20 },
   async (request) => {
     const data = (request.data ?? {}) as {
       customer?: {
@@ -313,13 +185,13 @@ export const createOrder = onCall(
       throw new HttpsError("invalid-argument", "Completa tu nombre.");
     }
     if (!address) {
-      throw new HttpsError("invalid-argument", "Completa la dirección de entrega.");
+      throw new HttpsError("invalid-argument", "Completa la direcciÃ³n de entrega.");
     }
     if (!isValidEmail(email)) {
-      throw new HttpsError("invalid-argument", "Ingresa un correo válido.");
+      throw new HttpsError("invalid-argument", "Ingresa un correo vÃ¡lido.");
     }
     if (!phone) {
-      throw new HttpsError("invalid-argument", "Ingresa un teléfono válido (7 a 15 dígitos).");
+      throw new HttpsError("invalid-argument", "Ingresa un telÃ©fono vÃ¡lido (7 a 15 dÃ­gitos).");
     }
 
     const items = parseItems(data.items);
@@ -329,7 +201,7 @@ export const createOrder = onCall(
       // 1. Lecturas (todas antes de cualquier escritura).
       const configSnap = await tx.get(db.doc("store_config/general"));
       if (!configSnap.exists) {
-        throw new HttpsError("failed-precondition", "La tienda no está configurada.");
+        throw new HttpsError("failed-precondition", "La tienda no estÃ¡ configurada.");
       }
       const config = configSnap.data() ?? {};
 
@@ -337,7 +209,7 @@ export const createOrder = onCall(
       const productRefs = new Map<string, DocumentReference>();
       const productSnaps = new Map<string, DocumentSnapshot>();
 
-      // Lectura única por SKU: el mismo producto puede venir en varias líneas (variantes).
+      // Lectura Ãºnica por SKU: el mismo producto puede venir en varias lÃ­neas (variantes).
       for (const sku of uniqueSkus) {
         const ref = db.doc(`products/${sku}`);
         productRefs.set(sku, ref);
@@ -356,13 +228,13 @@ export const createOrder = onCall(
       const customerSnap = await tx.get(customerRef);
 
       // Borrador "Seleccionando" a borrar al confirmar (lectura ANTES de escribir).
-      // Firestore aborta la transacción si hay una lectura después de una escritura.
+      // Firestore aborta la transacciÃ³n si hay una lectura despuÃ©s de una escritura.
       // El draft vive en `orders/selecting-{clientKey}` (status selecting) para
       // que el admin lo vea como un pedido en la app.
       const draftRef = db.doc(`orders/selecting-${phone}`);
       const draftSnap = await tx.get(draftRef);
 
-      // 2. Validaciones y cálculo con precios del servidor.
+      // 2. Validaciones y cÃ¡lculo con precios del servidor.
       const lines: Array<{
         sku: string;
         name: string;
@@ -384,7 +256,7 @@ export const createOrder = onCall(
       for (const item of items) {
         const snap = productSnaps.get(item.sku);
         if (!snap?.exists) {
-          throw new HttpsError("not-found", `El producto ${item.sku} ya no está disponible.`);
+          throw new HttpsError("not-found", `El producto ${item.sku} ya no estÃ¡ disponible.`);
         }
 
         const product = snap.data() ?? {};
@@ -394,13 +266,13 @@ export const createOrder = onCall(
         const productCatalogIds = Array.isArray(product.catalogIds) ? product.catalogIds : [];
 
         if (!available) {
-          throw new HttpsError("failed-precondition", `${productName} no está disponible.`);
+          throw new HttpsError("failed-precondition", `${productName} no estÃ¡ disponible.`);
         }
         if (!productCatalogIds.includes(item.catalogId)) {
-          throw new HttpsError("invalid-argument", `${productName} no pertenece a ese catálogo.`);
+          throw new HttpsError("invalid-argument", `${productName} no pertenece a ese catÃ¡logo.`);
         }
         if (!Number.isFinite(price) || price < 0) {
-          throw new HttpsError("failed-precondition", `${productName} no tiene un precio válido.`);
+          throw new HttpsError("failed-precondition", `${productName} no tiene un precio vÃ¡lido.`);
         }
 
         const variants = normalizeVariants(product.variants);
@@ -412,14 +284,14 @@ export const createOrder = onCall(
           if (!item.variantId) {
             throw new HttpsError(
               "invalid-argument",
-              `${productName} requiere elegir una opción (color/talla).`
+              `${productName} requiere elegir una opciÃ³n (color/talla).`
             );
           }
           const match = variants.find((v) => v.id === item.variantId);
           if (!match) {
             throw new HttpsError(
               "failed-precondition",
-              `La opción elegida para ${productName} ya no está disponible.`
+              `La opciÃ³n elegida para ${productName} ya no estÃ¡ disponible.`
             );
           }
           if (match.stock < item.quantity) {
@@ -478,32 +350,32 @@ export const createOrder = onCall(
         });
       }
 
-      // 3. Mínimos globales y por catálogo.
+      // 3. MÃ­nimos globales y por catÃ¡logo.
       const globalMin = typeof config.globalMinOrder === "number" ? config.globalMinOrder : 0;
       if (total < globalMin) {
         throw new HttpsError(
           "failed-precondition",
-          `La compra mínima es $${globalMin.toFixed(2)}. Tu total es $${total.toFixed(2)}.`
+          `La compra mÃ­nima es $${globalMin.toFixed(2)}. Tu total es $${total.toFixed(2)}.`
         );
       }
 
       for (const [catalogId, subtotal] of Object.entries(subtotalByCatalog)) {
         const catalogSnap = catalogSnaps.get(catalogId);
         if (!catalogSnap?.exists) {
-          throw new HttpsError("not-found", "Uno de los catálogos ya no existe.");
+          throw new HttpsError("not-found", "Uno de los catÃ¡logos ya no existe.");
         }
         const catalog = catalogSnap.data() ?? {};
         if (catalog.isActive === false) {
           throw new HttpsError(
             "failed-precondition",
-            `El catálogo ${catalog.title ?? catalogId} no está disponible.`
+            `El catÃ¡logo ${catalog.title ?? catalogId} no estÃ¡ disponible.`
           );
         }
         const min = typeof catalog.minOrderSubtotal === "number" ? catalog.minOrderSubtotal : 0;
         if (subtotal < min) {
           throw new HttpsError(
             "failed-precondition",
-            `El catálogo ${catalog.title ?? catalogId} requiere un mínimo de $${min.toFixed(
+            `El catÃ¡logo ${catalog.title ?? catalogId} requiere un mÃ­nimo de $${min.toFixed(
               2
             )}. Tu subtotal es $${subtotal.toFixed(2)}.`
           );
@@ -520,14 +392,14 @@ export const createOrder = onCall(
         total,
         status: "pending",
         // El stock se descuenta al pasar a "Listo" (ver onOrderStatusUpdated),
-        // no al crear el pedido. stockDecremented marca si ya se descontó.
+        // no al crear el pedido. stockDecremented marca si ya se descontÃ³.
         stockDecremented: false,
         source: "web",
         ...(request.auth ? { userId: request.auth.uid } : {}),
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      // 5. Borrar el borrador "Seleccionando" de este cliente (si existía).
+      // 5. Borrar el borrador "Seleccionando" de este cliente (si existÃ­a).
       if (draftSnap.exists) {
         tx.delete(draftRef);
       }
@@ -566,11 +438,11 @@ export const createOrder = onCall(
 );
 
 // ---------------------------------------------------------------------------
-// Módulo B.1: Borrador "Seleccionando" (uno por cliente, sin stock)
+// MÃ³dulo B.1: Borrador "Seleccionando" (uno por cliente, sin stock)
 // ---------------------------------------------------------------------------
 
 export const saveSelectingDraft = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", maxInstances: 20 },
   async (request) => {
     const data = (request.data ?? {}) as {
       clientKey?: unknown;
@@ -578,15 +450,25 @@ export const saveSelectingDraft = onCall(
       items?: unknown;
     };
     const clientKey = cleanText(data.clientKey, 120);
-    if (!clientKey) {
+    // Teléfono ("+<dígitos>") o id de invitado. Cualquier otro formato
+    // (p. ej. con "/") se rechaza: evita escrituras a rutas arbitrarias.
+    if (!clientKey || !CLIENT_KEY_REGEX.test(clientKey)) {
       throw new HttpsError("invalid-argument", "Falta identificar al cliente.");
+    }
+    pruneRateLimitBucket(rateBuckets, RATE_WINDOW_1H);
+    if (hitRateLimit(rateBuckets, `draft:${clientKey}`, RATE_MAX_5M, RATE_WINDOW_5M)) {
+      logger.warn("saveSelectingDraft: rate limit excedido", { clientKey });
+      throw new HttpsError(
+        "resource-exhausted",
+        "Demasiadas actualizaciones. Espera un momento e intenta de nuevo."
+      );
     }
     const items = parseItems(data.items);
     const phone = normalizePhone(data.customerPhone);
     const ref = db.doc(`orders/selecting-${clientKey}`);
 
-    // Enriquecer líneas con nombre/precio/subtotal reales (antes solo se
-    // guardaba sku; por eso veías el SKU sin montos en el APK).
+    // Enriquecer lÃ­neas con nombre/precio/subtotal reales (antes solo se
+    // guardaba sku; por eso veÃ­as el SKU sin montos en el APK).
     const lines: Array<{
       sku: string;
       name: string;
@@ -627,7 +509,7 @@ export const saveSelectingDraft = onCall(
         ...(item.note ? { note: item.note } : {}),
       });
     }
-    // Si el cliente ya está registrado con ese teléfono, relacionamos el
+    // Si el cliente ya estÃ¡ registrado con ese telÃ©fono, relacionamos el
     // draft con su ficha (nombre/email) para que aparezca ligado al cliente.
     let linkedName = "";
     let linkedEmail = "";
@@ -639,7 +521,7 @@ export const saveSelectingDraft = onCall(
           linkedEmail = String(cust.data()?.email ?? "");
         }
       } catch {
-        // Sin ficha: se guarda solo con el teléfono.
+        // Sin ficha: se guarda solo con el telÃ©fono.
       }
     }
     await ref.set(
@@ -659,7 +541,7 @@ export const saveSelectingDraft = onCall(
   }
 );
 
-// Descuento/reposición de stock según el estado (Listo / Cancelado).
+// Descuento/reposiciÃ³n de stock segÃºn el estado (Listo / Cancelado).
 async function adjustStock(order: any, delta: 1 | -1): Promise<void> {
   const items = Array.isArray(order.items) ? order.items : [];
   await db.runTransaction(async (tx) => {
@@ -677,7 +559,7 @@ async function adjustStock(order: any, delta: 1 | -1): Promise<void> {
       perSku.set(sku, entry);
     }
     // Lecturas primero (una por SKU), luego escrituras (Firestore aborta
-    // la transacción si hay una lectura después de una escritura).
+    // la transacciÃ³n si hay una lectura despuÃ©s de una escritura).
     const snaps = new Map<string, DocumentSnapshot>();
     for (const sku of perSku.keys()) {
       snaps.set(sku, await tx.get(db.doc(`products/${sku}`)));
@@ -724,7 +606,7 @@ export const onOrderStatusUpdated = onDocumentUpdated(
     const beforeStatus = String(before.status ?? "");
     const afterStatus = String(after.status ?? "");
 
-    // Regenerar PDF si cambiaron items/total (edición del pedido).
+    // Regenerar PDF si cambiaron items/total (ediciÃ³n del pedido).
     const beforeItems = JSON.stringify(before.items ?? []);
     const afterItems = JSON.stringify(after.items ?? []);
     if (beforeItems !== afterItems || Number(before.total ?? 0) !== Number(after.total ?? 0)) {
@@ -761,7 +643,7 @@ export const onOrderStatusUpdated = onDocumentUpdated(
 );
 
 // ---------------------------------------------------------------------------
-// Módulo C: Automatizaciones Backend (trigger on order created)
+// MÃ³dulo C: Automatizaciones Backend (trigger on order created)
 // ---------------------------------------------------------------------------
 
 export const onOrderCreated = onDocumentCreated(
@@ -779,7 +661,7 @@ export const onOrderCreated = onDocumentCreated(
     let pdfPath = typeof order.pdfPath === "string" ? order.pdfPath : "";
     let pdfBuffer: Buffer | undefined;
 
-    // 1. Generar el PDF solo si aún no existe (idempotencia).
+    // 1. Generar el PDF solo si aÃºn no existe (idempotencia).
     if (!pdfPath) {
       pdfBuffer = await buildOrderPdf(order, orderId);
       pdfPath = `orders/${orderId}.pdf`;
@@ -799,8 +681,8 @@ export const onOrderCreated = onDocumentCreated(
         await resend.emails.send({
           from: process.env.RESEND_FROM ?? "pedidos@ventas.online",
           to: order.customerEmail,
-          subject: `Confirmación de pedido #${orderId}`,
-          html: `<p>Hola ${order.customerName},</p><p>Gracias por tu pedido. Adjuntamos el PDF con el detalle.</p>`,
+          subject: `ConfirmaciÃ³n de pedido #${orderId}`,
+          html: `<p>Hola ${escapeHtml(order.customerName)},</p><p>Gracias por tu pedido <strong>#${escapeHtml(orderId)}</strong>. Adjuntamos el PDF con el detalle.</p>`,
           attachments: [
             {
               filename: `pedido-${orderId}.pdf`,
@@ -814,7 +696,7 @@ export const onOrderCreated = onDocumentCreated(
       }
     }
 
-    // 3. Notificación push una sola vez.
+    // 3. NotificaciÃ³n push una sola vez.
     if (!order.pushSentAt) {
       try {
         const tokensSnap = await db.collection("admin_tokens").get();
@@ -831,7 +713,7 @@ export const onOrderCreated = onDocumentCreated(
             tokens,
             notification: {
               title: customerName,
-              body: `${amount} · Nuevo pedido`,
+              body: `${amount} Â· Nuevo pedido`,
             },
             data: { orderId: String(orderId), type: "new_order" },
           });
@@ -845,11 +727,11 @@ export const onOrderCreated = onDocumentCreated(
 );
 
 // ---------------------------------------------------------------------------
-// Módulo E: Consulta de pedido sin sesión (pedido + teléfono deben coincidir)
+// MÃ³dulo E: Consulta de pedido sin sesiÃ³n (pedido + telÃ©fono deben coincidir)
 // ---------------------------------------------------------------------------
 
 export const getOrderDetails = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", maxInstances: 20 },
   async (request) => {
     const data = (request.data ?? {}) as {
       orderId?: unknown;
@@ -860,14 +742,14 @@ export const getOrderDetails = onCall(
     const phone = normalizePhone(data.customerPhone);
 
     if (!orderId || !phone) {
-      throw new HttpsError("invalid-argument", "Ingresa el número de pedido y tu teléfono.");
+      throw new HttpsError("invalid-argument", "Ingresa el nÃºmero de pedido y tu telÃ©fono.");
     }
 
     const snap = await db.doc(`orders/${orderId}`).get();
-    // Mismo mensaje para "no existe" y "teléfono no coincide":
-    // no damos pistas de qué IDs existen.
+    // Mismo mensaje para "no existe" y "telÃ©fono no coincide":
+    // no damos pistas de quÃ© IDs existen.
     if (!snap.exists || snap.data()?.customerPhone !== phone) {
-      throw new HttpsError("not-found", "No encontramos ese pedido con ese teléfono.");
+      throw new HttpsError("not-found", "No encontramos ese pedido con ese telÃ©fono.");
     }
 
     const order = snap.data() ?? {};
@@ -884,10 +766,11 @@ export const getOrderDetails = onCall(
         }))
       : [];
 
+    // Sin PII (nombre/dirección): un invitado que conozca el pedido+teléfono
+    // de otro no debe poder leer su dirección. La UI invitada muestra la
+    // dirección guardada en el navegador del propio cliente.
     return {
       orderId,
-      customerName: String(order.customerName ?? ""),
-      deliveryAddress: String(order.deliveryAddress ?? ""),
       status: String(order.status ?? "pending"),
       total: Number(order.total ?? 0),
       itemCount: items.length,
@@ -901,16 +784,28 @@ export const getOrderDetails = onCall(
 );
 
 export const getOrdersByPhone = onCall(
-  { region: "us-central1" },
+  { region: "us-central1", maxInstances: 20 },
   async (request) => {
     const phone = normalizePhone(
       (request.data as { customerPhone?: unknown })?.customerPhone
     );
     if (!phone) {
-      throw new HttpsError("invalid-argument", "Ingresa un teléfono válido.");
+      throw new HttpsError("invalid-argument", "Ingresa un telÃ©fono vÃ¡lido.");
     }
 
-    // Sin orderBy para no requerir índices compuestos; ordenamos en memoria.
+    // Sin orderBy para no requerir Ã­ndices compuestos; ordenamos en memoria.
+    pruneRateLimitBucket(rateBuckets, RATE_WINDOW_1H);
+    if (
+      hitRateLimit(rateBuckets, `phone5m:${phone}`, RATE_MAX_5M, RATE_WINDOW_5M) ||
+      hitRateLimit(rateBuckets, `phone1h:${phone}`, RATE_MAX_1H, RATE_WINDOW_1H)
+    ) {
+      logger.warn("getOrdersByPhone: rate limit excedido", { phone });
+      throw new HttpsError(
+        "resource-exhausted",
+        "Demasiadas consultas. Espera un momento e intenta de nuevo."
+      );
+    }
+
     const snap = await db
       .collection("orders")
       .where("customerPhone", "==", phone)
@@ -918,6 +813,8 @@ export const getOrdersByPhone = onCall(
       .get();
 
     const orders = snap.docs
+      // Los borradores "Seleccionando" no son pedidos: se ocultan de Mis pedidos.
+      .filter((doc) => String(doc.data().status ?? "") !== "selecting")
       .map((doc) => {
         const order = doc.data();
         return {
@@ -942,14 +839,14 @@ export const getOrdersByPhone = onCall(
 );
 
 // ---------------------------------------------------------------------------
-// Módulo D: URL firmada para el PDF (solo dueño o admin)
+// MÃ³dulo D: URL firmada para el PDF (solo dueÃ±o o admin)
 // ---------------------------------------------------------------------------
 
 export const getOrderPdfUrl = onCall(
   { region: "us-central1" },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Inicia sesión para ver el PDF.");
+      throw new HttpsError("unauthenticated", "Inicia sesiÃ³n para ver el PDF.");
     }
 
     const orderId = cleanText((request.data as { orderId?: unknown })?.orderId, 200);
@@ -975,7 +872,7 @@ export const getOrderPdfUrl = onCall(
     let pdfPath = typeof order.pdfPath === "string" ? order.pdfPath : "";
     const bucket = storage.bucket();
     if (!pdfPath) {
-      // Generación bajo demanda: incluso los pedidos "Seleccionando" pueden
+      // GeneraciÃ³n bajo demanda: incluso los pedidos "Seleccionando" pueden
       // compartir el PDF (antes no se generaba y daba "PDF no listo").
       try {
         const buf = await buildOrderPdf(order, orderId);
@@ -987,7 +884,7 @@ export const getOrderPdfUrl = onCall(
         await snap.ref.set({ pdfPath }, { merge: true });
       } catch (e) {
         logger.error("getOrderPdfUrl: on-demand PDF error", e);
-        throw new HttpsError("failed-precondition", "El PDF todavía no está listo.");
+        throw new HttpsError("failed-precondition", "El PDF todavÃ­a no estÃ¡ listo.");
       }
     }
 
@@ -999,12 +896,14 @@ export const getOrderPdfUrl = onCall(
       });
       return { url };
     } catch (e: any) {
-      // Fallback: la cuenta de servicio no tiene iam.serviceAccounts.signBlob
-      // (causa del 500). Dejamos el PDF con lectura pública temporal como
-      // deuda técnica conocida y devolvemos la URL pública de Google Storage.
-      logger.warn("getOrderPdfUrl: signed URL failed, usando URL pública temporal", e);
-      await file.makePublic().catch(() => undefined);
-      return { url: `https://storage.googleapis.com/${bucket.name}/${pdfPath}` };
+      // NUNCA publicar el PDF (contiene PII): si la firma falla, se reporta
+      // el error y el usuario reintenta. El arreglo de fondo es darle a la
+      // cuenta de servicio el permiso iam.serviceAccounts.signBlob.
+      logger.error("getOrderPdfUrl: no se pudo firmar el PDF", e);
+      throw new HttpsError(
+        "failed-precondition",
+        "El PDF todavía no está listo. Intenta de nuevo en unos minutos."
+      );
     }
   }
 );
@@ -1015,7 +914,7 @@ export const getOrderPdfUrl = onCall(
 
 async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
   const PDFDocument = (await import("pdfkit")).default;
-  // Datos básicos de la empresa para el encabezado del PDF.
+  // Datos bÃ¡sicos de la empresa para el encabezado del PDF.
   let store: Record<string, unknown> = {};
   try {
     const cfg = await db.doc("store_config/general").get();
@@ -1059,7 +958,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    // Encabezado Minimalist Emerald-Contrast: dos columnas — empresa izq, factura der.
+    // Encabezado Minimalist Emerald-Contrast: dos columnas â€” empresa izq, factura der.
     const startY = doc.y;
     if (logoBuf) {
       try {
@@ -1069,7 +968,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
     const textX = logoBuf ? 116 : 50;
     doc.font("Helvetica-Bold").fontSize(13).fillColor("#047857").text(company, textX, startY, { width: 230 });
     doc.font("Helvetica").fontSize(9).fillColor("#64748b");
-    const contact = [phone, city].filter(Boolean).join(" · ");
+    const contact = [phone, city].filter(Boolean).join(" Â· ");
     if (contact) doc.text(contact, textX, doc.y);
     if (order.status) {
       doc.font("Helvetica-Bold").fontSize(9).fillColor("#059669").text(`Estado: ${statusLabelEs}`, textX, doc.y);
@@ -1087,9 +986,9 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
     doc.moveDown(0.8);
     doc.fontSize(11).fillColor("#1e293b");
     doc.font("Helvetica-Bold").text(`Cliente: ${order.customerName ?? ""}`);
-    doc.font("Helvetica").text(`Teléfono: ${order.customerPhone ?? ""}`);
+    doc.font("Helvetica").text(`TelÃ©fono: ${order.customerPhone ?? ""}`);
     doc.text(`Email: ${order.customerEmail ?? ""}`);
-    doc.text(`Dirección: ${order.deliveryAddress ?? ""}`);
+    doc.text(`DirecciÃ³n: ${order.deliveryAddress ?? ""}`);
     doc.moveDown();
 
     const items = Array.isArray(order.items) ? order.items : [];
@@ -1110,7 +1009,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
     doc.fillColor("#1e293b");
     y += 30;
     doc.font("Helvetica").fontSize(10);
-    // Fotos pequeñas: se intenta incrustar la primera imagen del producto.
+    // Fotos pequeÃ±as: se intenta incrustar la primera imagen del producto.
     const thumbCache = new Map<string, Buffer | null>();
     const getThumb = async (sku: string): Promise<Buffer | null> => {
       if (thumbCache.has(sku)) return thumbCache.get(sku) ?? null;
@@ -1135,7 +1034,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
       started = true;
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
-        const label = typeof it.variantLabel === "string" && it.variantLabel ? ` · ${it.variantLabel}` : "";
+        const label = typeof it.variantLabel === "string" && it.variantLabel ? ` Â· ${it.variantLabel}` : "";
         const nameText = `${it.name ?? ""}${label}`;
         const thumb = thumbs[i];
         const rowH = Math.max(34, doc.heightOfString(nameText, { width: 155 }) + 18);
@@ -1170,7 +1069,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
           y = 50;
         }
       }
-      // Gran Total esmeralda sólido.
+      // Gran Total esmeralda sÃ³lido.
       y += 8;
       const totalText = `TOTAL  ${cop(Number(order.total ?? 0))}`;
       doc.save();
@@ -1179,7 +1078,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
       doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(14).text(totalText, 340, y + 9, { width: 205, align: "center" });
       doc.y = y + 44;
       doc.moveTo(50, doc.y + 6).lineTo(545, doc.y + 6).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
-      doc.font("Helvetica").fontSize(8).fillColor("#94a3b8").text(`Gracias por su compra. ${company}${contact ? " · " + contact : ""} · Pago contra entrega / transferencia.`, { align: "center" });
+      doc.font("Helvetica").fontSize(8).fillColor("#94a3b8").text(`Gracias por su compra. ${company}${contact ? " Â· " + contact : ""} Â· Pago contra entrega / transferencia.`, { align: "center" });
       doc.end();
     };
     thumbsPromise.then(draw).catch(() => draw(items.map(() => null)));
@@ -1187,7 +1086,7 @@ async function buildOrderPdf(order: any, orderId: string): Promise<Buffer> {
 }
 
 // ---------------------------------------------------------------------------
-// Módulo F: Generación de descripción de producto con Gemini (solo texto)
+// MÃ³dulo F: GeneraciÃ³n de descripciÃ³n de producto con Gemini (solo texto)
 // ---------------------------------------------------------------------------
 
 export const generateProductDescription = onCall(
@@ -1196,7 +1095,7 @@ export const generateProductDescription = onCall(
     if (request.auth?.token.admin !== true) {
       throw new HttpsError("unauthenticated", "Solo el admin puede generar descripciones.");
     }
-    // Llave desde secreto/env (privada) o Config privada (solo admins) para probar rápido.
+    // Llave desde secreto/env (privada) o Config privada (solo admins) para probar rÃ¡pido.
     // El contexto de la tienda se lee de Config/SEO (companyName, city,
     // metaTitle, metaDescription, keywords, slogan) para no fijar un rubro
     // en el prompt: la tienda puede cambiar de rubro.
@@ -1210,7 +1109,8 @@ export const generateProductDescription = onCall(
     try {
       const cfgSnap = await db.doc("store_config/general").get();
       const cfg = cfgSnap.data() ?? {};
-      // Prioridad: env -> private_config (solo admins) -> store_config (legacy público, transición).
+      // Prioridad: env -> private_config (solo admins). NUNCA store_config:
+      // es de lectura pública y ahí no puede haber una clave de IA.
       if (!geminiKey) {
         try {
           const privSnap = await db.doc("private_config/gemini").get();
@@ -1220,13 +1120,7 @@ export const generateProductDescription = onCall(
             geminiKey = rawPriv.trim();
           }
         } catch {
-          // Sin doc privado: se intenta el legacy.
-        }
-      }
-      if (!geminiKey) {
-        const raw = cfg["geminiApiKey"];
-        if (typeof raw === "string" && raw.trim().length > 0) {
-          geminiKey = raw.trim();
+          // Sin doc privado: geminiKey queda vacía y se reporta abajo.
         }
       }
       if (typeof cfg["city"] === "string") storeCity = cfg["city"].trim();
@@ -1240,7 +1134,7 @@ export const generateProductDescription = onCall(
         storeKeywords = cfg["keywords"].trim();
       }
     } catch {
-      // Sin Config: se continúa con el contexto vacío (prompt genérico).
+      // Sin Config: se continÃºa con el contexto vacÃ­o (prompt genÃ©rico).
     }
     if (!geminiKey) {
       throw new HttpsError("failed-precondition", "Falta configurar la clave de Gemini en Config (privado) o GEMINI_API_KEY.");
@@ -1248,8 +1142,8 @@ export const generateProductDescription = onCall(
     const storeContextParts: string[] = [];
     if (storeName) storeContextParts.push(`Tienda: "${storeName}"`);
     if (storeCity) storeContextParts.push(`ciudad: "${storeCity}"`);
-    if (storeMetaTitle) storeContextParts.push(`título SEO de la tienda: "${storeMetaTitle}"`);
-    if (storeMetaDescription) storeContextParts.push(`descripción de la tienda: "${storeMetaDescription}"`);
+    if (storeMetaTitle) storeContextParts.push(`tÃ­tulo SEO de la tienda: "${storeMetaTitle}"`);
+    if (storeMetaDescription) storeContextParts.push(`descripciÃ³n de la tienda: "${storeMetaDescription}"`);
     if (storeKeywords) storeContextParts.push(`palabras clave de la tienda: "${storeKeywords}"`);
     if (storeSlogan) storeContextParts.push(`eslogan: "${storeSlogan}"`);
     const storeContext = storeContextParts.length > 0
@@ -1367,19 +1261,19 @@ export const generateProductDescription = onCall(
 
     const stripAccents = (s: string): string =>
       s
-        .replaceAll("á", "a")
-        .replaceAll("é", "e")
-        .replaceAll("í", "i")
-        .replaceAll("ó", "o")
-        .replaceAll("ú", "u")
-        .replaceAll("ü", "u")
-        .replaceAll("ñ", "n")
-        .replaceAll("Á", "a")
-        .replaceAll("É", "e")
-        .replaceAll("Í", "i")
-        .replaceAll("Ó", "o")
-        .replaceAll("Ú", "u")
-        .replaceAll("Ñ", "n");
+        .replaceAll("Ã¡", "a")
+        .replaceAll("Ã©", "e")
+        .replaceAll("Ã­", "i")
+        .replaceAll("Ã³", "o")
+        .replaceAll("Ãº", "u")
+        .replaceAll("Ã¼", "u")
+        .replaceAll("Ã±", "n")
+        .replaceAll("Ã", "a")
+        .replaceAll("Ã‰", "e")
+        .replaceAll("Ã", "i")
+        .replaceAll("Ã“", "o")
+        .replaceAll("Ãš", "u")
+        .replaceAll("Ã‘", "n");
 
     const buildSeoTitle = (n: string, b: string, city: string, company: string = ""): string => {
       const base = `${b ? b + " " : ""}${n}`.trim() || "Producto";
@@ -1592,7 +1486,7 @@ export const generateProductDescription = onCall(
       if (!raw) return "";
       return raw
         .split(",")
-        .map((t) => t.trim().toLowerCase().replace(/^#/, "").replaceAll("á", "a").replaceAll("é", "e").replaceAll("í", "i").replaceAll("ó", "o").replaceAll("ú", "u").replaceAll("ñ", "n"))
+        .map((t) => t.trim().toLowerCase().replace(/^#/, "").replaceAll("Ã¡", "a").replaceAll("Ã©", "e").replaceAll("Ã­", "i").replaceAll("Ã³", "o").replaceAll("Ãº", "u").replaceAll("Ã±", "n"))
         .filter(Boolean)
         .slice(0, 8)
         .join(", ");

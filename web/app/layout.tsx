@@ -5,6 +5,7 @@ import { CustomerProvider } from "@/lib/customer";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsappFloat } from "@/components/whatsapp-float";
+import { CartFloat } from "@/components/cart-float";
 import { VisitTracker } from "@/components/visit-tracker";
 import { Toaster } from "@/components/ui/toaster";
 import { getStoreConfig, getCatalogs } from "@/lib/serverData";
@@ -111,6 +112,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   catalogs={headerCatalogs}
                 />
                 <div className="flex-1">{children}</div>
+                <CartFloat />
                 <WhatsappFloat
                   phones={[
                     String(config?.phoneContact ?? ""),

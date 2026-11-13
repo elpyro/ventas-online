@@ -158,7 +158,7 @@ export function CartDrawer({
                       <button
                         aria-label="Quitar uno"
                         onClick={() => updateQty(item.key, item.quantity - 1)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full border text-muted-foreground transition-colors hover:bg-muted"
+                        className="flex h-6 w-6 items-center justify-center rounded-full border border-primary/30 text-primary transition-colors hover:bg-primary/10"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -168,7 +168,7 @@ export function CartDrawer({
                       <button
                         aria-label="Agregar uno"
                         onClick={() => updateQty(item.key, item.quantity + 1)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full border text-muted-foreground transition-colors hover:bg-muted"
+                        className="flex h-6 w-6 items-center justify-center rounded-full border border-primary/30 text-primary transition-colors hover:bg-primary/10"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -215,7 +215,7 @@ export function CartDrawer({
                     router.push("/checkout");
                   }}
                 >
-                  Ir al checkout
+                  Ir a confirmación
                   <ArrowRight className="h-4 w-4" />
                 </Button>
                 <Link

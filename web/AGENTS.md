@@ -48,7 +48,7 @@ npm run lint
 
 ## Limitaciones conocidas
 
-- El checkout crea pedidos con el SDK del cliente (con fallback `addDoc`);
+- La página de confirmación (/checkout) crea pedidos con el SDK del cliente (con fallback `addDoc`);
   los precios los valida `createOrder` en el servidor.
 - `/catalogo/[id]` carga los productos en el cliente; la ficha `/producto/[sku]`
   sí es servidor (metadata + JSON-LD).

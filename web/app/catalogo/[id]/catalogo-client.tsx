@@ -102,11 +102,6 @@ export default function CatalogoClient({
       return;
     }
     addItem(p, id);
-    toast({
-      title: "Agregado al carrito",
-      description: `${p.name} · ${cop.format(p.price)}`,
-      variant: "success",
-    });
   }
 
   function handleRemoveOne(p: Product) {
@@ -232,11 +227,6 @@ export default function CatalogoClient({
                   !available && "select-none opacity-60 grayscale"
                 )}
               >
-                {added > 0 && (
-                  <Badge className="absolute right-2 top-2 z-10 bg-primary px-2 py-0.5 text-[11px] shadow">
-                    {added} en carrito
-                  </Badge>
-                )}
                 {!available && (
                   <Badge className="absolute left-2 top-2 z-10 bg-slate-900 px-2 py-0.5 text-[11px] text-white">
                     Agotado
@@ -248,8 +238,11 @@ export default function CatalogoClient({
                   </Badge>
                 )}
                 {limitReached && (
-                  <Badge className="absolute left-2 top-2 z-10 border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] text-amber-900">
-                    En carrito: {stock} uds.
+                  <Badge
+                    title="Agregaste todo el stock disponible"
+                    className="absolute right-2 top-2 z-10 border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900"
+                  >
+                    Máximo agregado
                   </Badge>
                 )}
                 <Link

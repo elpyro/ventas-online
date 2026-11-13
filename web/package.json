@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "e2e:purchase": "node scripts/e2e-purchase.mjs",
     "e2e:variants": "node scripts/e2e-variants.mjs",
     "e2e:visits": "node scripts/e2e-visits.mjs"
@@ -34,6 +35,7 @@
     "playwright-core": "^1.65.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^5.1.0"
   }
 }

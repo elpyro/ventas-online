@@ -39,7 +39,7 @@ export function HeroBadges({ badges }: { badges: unknown }) {
 
   return (
     <>
-      <div className="mt-4 flex flex-wrap gap-3 text-xs font-medium text-blue-100">
+      <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium text-blue-100">
         {items.map((badge, i) => {
           const hasDesc = badge.description.length > 0;
           const content = (

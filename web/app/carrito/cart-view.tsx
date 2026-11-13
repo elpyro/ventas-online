@@ -36,7 +36,7 @@ export default function CartView({
   catalogs: CarritoCatalog[];
 }) {
   const router = useRouter();
-  const { items, total, updateQty, removeItem, clear } = useCart();
+  const { items, total, updateQty, removeItem, clear, setNote } = useCart();
 
   if (items.length === 0) {
     return (
@@ -111,7 +111,7 @@ export default function CartView({
                     <button
                       aria-label="Quitar uno"
                       onClick={() => updateQty(item.key, item.quantity - 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border transition-all hover:bg-muted active:scale-90"
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 text-primary transition-all hover:bg-primary/10 active:scale-90"
                     >
                       <Minus className="h-4 w-4" />
                     </button>
@@ -121,7 +121,7 @@ export default function CartView({
                     <button
                       aria-label="Agregar uno"
                       onClick={() => updateQty(item.key, item.quantity + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border transition-all hover:bg-muted active:scale-90"
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 text-primary transition-all hover:bg-primary/10 active:scale-90"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -133,6 +133,13 @@ export default function CartView({
                       <Trash2 className="h-5 w-5" />
                     </button>
                   </div>
+                  <input
+                    placeholder="Nota para este producto (opcional)"
+                    aria-label={`Nota para ${item.name}`}
+                    value={item.note ?? ""}
+                    onChange={(e) => setNote(item.key, e.target.value)}
+                    className="mt-2 w-full rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary"
+                  />
                 </div>
                 <div className="text-right">
                   <p className="hidden text-xs text-muted-foreground sm:block">
@@ -156,7 +163,7 @@ export default function CartView({
                 <span className="text-2xl font-extrabold">{cop.format(total)}</span>
               </div>
               <Button size="lg" className="w-full" onClick={() => router.push("/checkout")}>
-                Ir a checkout
+                Ir a confirmación
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <Link

@@ -91,5 +91,6 @@ export const cop = new Intl.NumberFormat("es-CO", {
 });
 
 export function formatPrice(value: unknown): string {
-  return cop.format(Number(value ?? 0));
+  const n = Number(value ?? 0);
+  return cop.format(Number.isFinite(n) ? n : 0);
 }

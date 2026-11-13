@@ -4,7 +4,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 /**
  * Reglas para buscadores y asistentes de IA.
- * Se permite indexación de catálogos y productos; carrito/checkout quedan fuera.
+ * Se permite indexación de catálogos y productos; carrito/confirmación quedan fuera.
  * El resumen para IA vive en /llms.txt (generado desde Firestore).
  */
 const PRIVATE_PATHS = ["/checkout", "/carrito", "/mis-pedidos", "/login", "/buscar", "/api/"];

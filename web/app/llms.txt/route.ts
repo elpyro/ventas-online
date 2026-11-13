@@ -131,7 +131,7 @@ export async function GET() {
     "## Cómo comprar",
     "",
     "1. Elegir un catálogo y agregar productos al carrito.",
-    "2. Completar nombre, teléfono, correo y dirección en el checkout.",
+    "2. Completar nombre, teléfono, correo y dirección en la página de confirmación.",
     "3. Confirmar el pedido en la web.",
     "4. Un asesor coordina el pago y el despacho por WhatsApp.",
     "",

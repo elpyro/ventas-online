@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const q = url.searchParams.get("q")?.trim() ?? "";
+  const q = (url.searchParams.get("q")?.trim() ?? "").slice(0, 80);
   if (q.length < 2) return Response.json({ results: [] });
 
   const products = (await getAllProducts()) ?? [];

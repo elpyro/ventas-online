@@ -4,6 +4,25 @@ import { auth } from "@/lib/firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
+const AUTH_ERRORS: Record<string, string> = {
+  "auth/invalid-phone-number": "Ese número no parece válido. Escribe el formato internacional (p. ej. +57 312 345 6789).",
+  "auth/too-many-requests": "Demasiados intentos. Espera un momento e intenta de nuevo.",
+  "auth/invalid-verification-code": "El código no coincide. Revisa e intenta de nuevo.",
+  "auth/code-expired": "El código venció. Pide uno nuevo.",
+  "auth/missing-phone-number": "Ingresa tu número de teléfono.",
+  "auth/captcha-check-failed": "La verificación de seguridad falló. Recarga la página e intenta de nuevo.",
+};
+
+function authErrorMessage(e: unknown): string {
+  const code =
+    e && typeof e === "object" && "code" in e && typeof (e as { code?: unknown }).code === "string"
+      ? (e as { code: string }).code
+      : "";
+  // Nunca se muestra el texto crudo de Firebase: no revela qué cuentas existen
+  // ni el estado interno del SDK.
+  return AUTH_ERRORS[code] ?? "No se pudo completar. Intenta de nuevo.";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
@@ -19,8 +38,8 @@ export default function LoginPage() {
       const verifier = new RecaptchaVerifier(recaptchaRef.current, { size: "invisible" }, auth);
       const conf = await signInWithPhoneNumber(auth, phone, verifier);
       setConfirmation(conf);
-    } catch (e: any) {
-      setError(e?.message ?? "Error enviando código");
+    } catch (e) {
+      setError(authErrorMessage(e));
     }
   }
 
@@ -29,8 +48,8 @@ export default function LoginPage() {
     try {
       await confirmation.confirm(code);
       router.push("/mis-pedidos");
-    } catch (e: any) {
-      setError(e?.message ?? "Código inválido");
+    } catch (e) {
+      setError(authErrorMessage(e));
     }
   }
 
