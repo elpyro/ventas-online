@@ -40,20 +40,32 @@ export function HomeSearch({
       return;
     }
     setLoading(true);
+    // No mostrar resultados de la búsqueda anterior mientras carga la nueva.
+    setResults([]);
+    // Abortar la petición en vuelo si el texto cambia: una respuesta vieja
+    // que llegue tarde no debe pisar los resultados de la búsqueda actual.
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         const data = (await res.json()) as { results?: SearchResult[] };
         setResults(Array.isArray(data.results) ? data.results : []);
-      } catch {
+      } catch (err) {
+        // AbortError es esperado al escribir rápido; no tocar el estado.
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setResults([]);
       } finally {
-        setLoading(false);
+        // Solo apagar el "Buscando…" si esta petición no fue abortada.
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   // Cerrar el desplegable al hacer clic fuera.
@@ -130,7 +142,7 @@ export function HomeSearch({
               Sin resultados para “{query.trim()}”.
             </p>
           )}
-          {results.length > 0 && (
+          {!loading && results.length > 0 && (
             <>
               <ul className="max-h-96 divide-y overflow-y-auto">
                 {results.map((r) => (

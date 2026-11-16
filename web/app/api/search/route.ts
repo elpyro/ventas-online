@@ -27,8 +27,12 @@ export async function GET(request: Request) {
       catalogId: Array.isArray(p.catalogIds) ? p.catalogIds[0] : "",
     }));
 
+  // Sin caché de CDN: la respuesta depende de `q` y Netlify no varía su
+  // clave de caché con los query params por defecto, así que cachearla
+  // servía el último resultado a todas las búsquedas. Los productos ya
+  // se cachean 60 s en el servidor (getAllProducts).
   return Response.json(
     { results },
-    { headers: { "cache-control": "public, max-age=30" } }
+    { headers: { "cache-control": "no-store" } }
   );
 }
