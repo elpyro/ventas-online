@@ -3,6 +3,7 @@ import {
   DocumentReference,
   DocumentSnapshot,
   FieldValue,
+  Transaction,
   getFirestore,
 } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -11,7 +12,8 @@ import { createHash, timingSafeEqual } from "crypto";
 import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
-import { roundMoney, cleanText, isValidEmail, normalizePhone, normalizeVariants, variantDisplayLabel, parseItems, normalizeSku, normalizeSkuDashed, escapeHtml, hitRateLimit, pruneRateLimitBucket, CLIENT_KEY_REGEX, RawVariant } from "./helpers";
+import { roundMoney, cleanText, isValidEmail, normalizePhone, normalizeVariants, variantDisplayLabel, parseItems, normalizeSku, normalizeSkuDashed, escapeHtml, hitRateLimit, pruneRateLimitBucket, CLIENT_KEY_REGEX, RawVariant, aggregateStockDelta, netStockDelta } from "./helpers";
+import type { StockDeltaBySku, VariantDeltas } from "./helpers";
 
 initializeApp();
 
@@ -248,9 +250,6 @@ export const createOrder = onCall(
       }> = [];
 
       const subtotalByCatalog: Record<string, number> = {};
-      // Descuento de stock agregado por SKU (y por variante si aplica).
-      const stockDeltaBySku = new Map<string, number>();
-      const variantDeltas = new Map<string, Map<string, number>>();
       let total = 0;
 
       for (const item of items) {
@@ -326,13 +325,6 @@ export const createOrder = onCall(
           (subtotalByCatalog[item.catalogId] ?? 0) + subtotal
         );
 
-        stockDeltaBySku.set(item.sku, (stockDeltaBySku.get(item.sku) ?? 0) + item.quantity);
-        if (variant) {
-          const byVariant = variantDeltas.get(item.sku) ?? new Map<string, number>();
-          byVariant.set(variant.id, (byVariant.get(variant.id) ?? 0) + item.quantity);
-          variantDeltas.set(item.sku, byVariant);
-        }
-
         lines.push({
           sku: item.sku,
           name: productName,
@@ -349,6 +341,10 @@ export const createOrder = onCall(
           ...(item.note ? { note: item.note } : {}),
         });
       }
+
+      // Descuento de stock agregado por SKU/variante (única cuenta,
+      // compartida con la reposición al cancelar; ver aggregateStockDelta).
+      const { stockDeltaBySku, variantDeltas } = aggregateStockDelta(items);
 
       // 3. MÃ­nimos globales y por catÃ¡logo.
       const globalMin = typeof config.globalMinOrder === "number" ? config.globalMinOrder : 0;
@@ -383,6 +379,11 @@ export const createOrder = onCall(
       }
 
       // 4. Escrituras.
+      // Primero el inventario (solo escribe: las lecturas ya ocurrieron en
+      // los pasos 1-3); Firestore aborta la transacción si hay una lectura
+      // después de una escritura.
+      applyStockDeltaInTx(tx, stockDeltaBySku, variantDeltas, productSnaps, productRefs, 1);
+
       tx.set(orderRef, {
         customerPhone: phone,
         customerName: name,
@@ -391,21 +392,22 @@ export const createOrder = onCall(
         items: lines,
         total,
         status: "pending",
-        // El stock se descuenta al pasar a "Listo" (ver onOrderStatusUpdated),
-        // no al crear el pedido. stockDecremented marca si ya se descontÃ³.
-        stockDecremented: false,
+        // El stock se descuenta aquí mismo, al crear el pedido (estado
+        // pendiente). stockDecremented marca que ya se descontó para que
+        // onOrderStatusUpdated no lo descuente otra vez al pasar a "Listo".
+        stockDecremented: true,
         source: "web",
         ...(request.auth ? { userId: request.auth.uid } : {}),
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      // 5. Borrar el borrador "Seleccionando" de este cliente (si existÃ­a).
+      // 5. Borrar el borrador "Seleccionando" de este cliente (si existía).
       if (draftSnap.exists) {
         tx.delete(draftRef);
       }
 
-      // El stock NO se descuenta al crear: se descuenta al pasar a "Listo"
-      // (onOrderStatusUpdated) y se repone al cancelar.
+      // El stock SE descuenta al crear (estado pendiente); si el pedido se
+      // cancela después, onOrderStatusUpdated lo repone al pasar a "Cancelado".
 
       // Solo actualizamos el perfil si el pedido pertenece al usuario autenticado.
       if (request.auth?.token.phone_number === phone) {
@@ -541,57 +543,106 @@ export const saveSelectingDraft = onCall(
   }
 );
 
-// Descuento/reposiciÃ³n de stock segÃºn el estado (Listo / Cancelado).
+/**
+ * Escribe el descuento (delta=1) o la reposiciÃ³n (delta=-1) de inventario en
+ * una transacciÃ³n YA existente. Solo escribe: todas las lecturas (snaps de
+ * producto) deben haber ocurrido antes en la misma transacciÃ³n. Nunca deja
+ * stock negativo; con variantes, `stock` total se recalcula como la suma y
+ * `isAvailable` queda derivado de Ã©l.
+ */
+function applyStockDeltaInTx(
+  tx: Transaction,
+  stockDeltaBySku: StockDeltaBySku,
+  variantDeltas: VariantDeltas,
+  snaps: Map<string, DocumentSnapshot>,
+  refs: Map<string, DocumentReference>,
+  delta: 1 | -1
+): void {
+  for (const [sku, qty] of stockDeltaBySku) {
+    const ref = refs.get(sku);
+    const snap = snaps.get(sku);
+    if (!ref || !snap?.exists) continue;
+    const product = snap.data() ?? {};
+    const variants = normalizeVariants(product.variants);
+    if (variants.length > 0) {
+      const byVariant = variantDeltas.get(sku) ?? new Map<string, number>();
+      const newVariants = variants.map((v) => ({
+        ...v,
+        stock: Math.max(0, v.stock - delta * (byVariant.get(v.id) ?? 0)),
+      }));
+      const newStock = newVariants.reduce((s, v) => s + v.stock, 0);
+      tx.update(ref, {
+        variants: newVariants,
+        stock: newStock,
+        isAvailable: newStock > 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      const stock = typeof product.stock === "number" ? product.stock : 0;
+      const newStock = Math.max(0, stock - delta * qty);
+      tx.update(ref, {
+        stock: newStock,
+        isAvailable: newStock > 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  }
+}
+
+// Descuento al pasar a "Listo" solo para pedidos antiguos (creados cuando
+// createOrder aÃºn no descontaba); reposiciÃ³n al pasar a "Cancelado".
 async function adjustStock(order: any, delta: 1 | -1): Promise<void> {
   const items = Array.isArray(order.items) ? order.items : [];
+  const { stockDeltaBySku, variantDeltas } = aggregateStockDelta(items);
   await db.runTransaction(async (tx) => {
-    const perSku = new Map<string, { qty: number; variants: Map<string, number> }>();
-    for (const it of items) {
-      const sku = String(it.sku ?? "");
-      if (!sku) continue;
-      const qty = Number(it.quantity ?? 0);
-      if (!Number.isInteger(qty) || qty < 1) continue;
-      const entry = perSku.get(sku) ?? { qty: 0, variants: new Map() };
-      entry.qty += qty;
-      if (typeof it.variantId === "string" && it.variantId) {
-        entry.variants.set(it.variantId, (entry.variants.get(it.variantId) ?? 0) + qty);
-      }
-      perSku.set(sku, entry);
-    }
     // Lecturas primero (una por SKU), luego escrituras (Firestore aborta
     // la transacciÃ³n si hay una lectura despuÃ©s de una escritura).
+    const refs = new Map<string, DocumentReference>();
     const snaps = new Map<string, DocumentSnapshot>();
-    for (const sku of perSku.keys()) {
-      snaps.set(sku, await tx.get(db.doc(`products/${sku}`)));
-    }
-    for (const [sku, entry] of perSku) {
+    for (const sku of stockDeltaBySku.keys()) {
       const ref = db.doc(`products/${sku}`);
-      const snap = snaps.get(sku);
-      if (!snap?.exists) continue;
-      const product = snap.data() ?? {};
-      const variants = normalizeVariants(product.variants);
-      if (variants.length > 0) {
-        const newVariants = variants.map((v) => ({
-          ...v,
-          stock: Math.max(0, v.stock - delta * (entry.variants.get(v.id) ?? 0)),
-        }));
-        const newStock = newVariants.reduce((s, v) => s + v.stock, 0);
-        tx.update(ref, {
-          variants: newVariants,
-          stock: newStock,
-          isAvailable: newStock > 0,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      } else {
-        const stock = typeof product.stock === "number" ? product.stock : 0;
-        const newStock = Math.max(0, stock - delta * entry.qty);
-        tx.update(ref, {
-          stock: newStock,
-          isAvailable: newStock > 0,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      }
+      refs.set(sku, ref);
+      snaps.set(sku, await tx.get(ref));
     }
+    applyStockDeltaInTx(tx, stockDeltaBySku, variantDeltas, snaps, refs, delta);
+  });
+}
+
+/**
+ * Ajuste NETO por ediciÃ³n del pedido desde el APK ("Preparar Pedido": cambios
+ * de cantidad o renglones borrados). Lee el estado antes/despuÃ©s de la
+ * actualizaciÃ³n y aplica la diferencia con signo: aumentos descuentan,
+ * reducciones devuelven al inventario. Solo aplica si el pedido sigue
+ * guardando un descuento (stockDecremented === true); cancelado repuesto =
+ * libros cerrados.
+ */
+async function adjustStockByNetDelta(beforeLines: any[], afterLines: any[]): Promise<void> {
+  const { increase, decrease } = netStockDelta(beforeLines, afterLines);
+  if (increase.stockDeltaBySku.size === 0 && decrease.stockDeltaBySku.size === 0) {
+    return;
+  }
+  await db.runTransaction(async (tx) => {
+    // Lecturas primero (una por SKU), luego escrituras.
+    const skus = new Set([...increase.stockDeltaBySku.keys(), ...decrease.stockDeltaBySku.keys()]);
+    const refs = new Map<string, DocumentReference>();
+    const snaps = new Map<string, DocumentSnapshot>();
+    for (const sku of skus) {
+      const ref = db.doc(`products/${sku}`);
+      refs.set(sku, ref);
+      snaps.set(sku, await tx.get(ref));
+    }
+    // Primero se devuelve, luego se descuenta: asÃ­ un mismo SKU nunca queda
+    // artificialmente en negativo pasajero antes del cÃ¡lculo final.
+    if (decrease.stockDeltaBySku.size > 0) {
+      applyStockDeltaInTx(tx, decrease.stockDeltaBySku, decrease.variantDeltas, snaps, refs, -1);
+    }
+    if (increase.stockDeltaBySku.size > 0) {
+      applyStockDeltaInTx(tx, increase.stockDeltaBySku, increase.variantDeltas, snaps, refs, 1);
+    }
+  });
+  logger.info("Stock ajustado por ediciÃ³n del pedido", {
+    aumento: Object.fromEntries(increase.stockDeltaBySku),
+    devolucion: Object.fromEntries(decrease.stockDeltaBySku),
   });
 }
 
@@ -618,6 +669,25 @@ export const onOrderStatusUpdated = onDocumentUpdated(
         await orderRef.set({ pdfPath: existing, pdfUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
       } catch (e) {
         logger.error("onOrderStatusUpdated: no se pudo regenerar el PDF", e);
+      }
+    }
+
+    // Edición desde "Preparar Pedido" (cantidades cambiadas o renglones
+    // borrados): reconciliar el inventario por la diferencia neta, no por el
+    // total. Aplica solo si el pedido aún guarda un descuento (stock
+    // descontado al crear); si ya se repuso por cancelación, los libros
+    // están cerrados y no se toca el stock.
+    if (after.stockDecremented === true && beforeItems !== afterItems) {
+      try {
+        await adjustStockByNetDelta(
+          Array.isArray(before.items) ? before.items : [],
+          Array.isArray(after.items) ? after.items : []
+        );
+      } catch (e) {
+        logger.error(
+          "onOrderStatusUpdated: no se pudo ajustar el stock por la edición del pedido",
+          e
+        );
       }
     }
 

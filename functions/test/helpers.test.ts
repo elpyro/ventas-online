@@ -9,6 +9,8 @@ import {
   parseItems,
   normalizeSku,
   normalizeSkuDashed,
+  aggregateStockDelta,
+  netStockDelta,
   escapeHtml,
   hitRateLimit,
   pruneRateLimitBucket,
@@ -254,5 +256,136 @@ describe("parseItems", () => {
       { sku: "S", catalogId: "c", quantity: 1, note: "x".repeat(500) },
     ]);
     expect(out[0].note).toHaveLength(200);
+  });
+});
+
+describe("aggregateStockDelta", () => {
+  it("suma cantidades por SKU sin variantes", () => {
+    const { stockDeltaBySku, variantDeltas } = aggregateStockDelta([
+      { sku: "A", quantity: 2 },
+      { sku: "B", quantity: 1 },
+      { sku: "A", quantity: 3 },
+    ]);
+    expect(stockDeltaBySku.get("A")).toBe(5);
+    expect(stockDeltaBySku.get("B")).toBe(1);
+    expect(variantDeltas.size).toBe(0);
+  });
+
+  it("agrega por variante y conserva el total por SKU", () => {
+    const { stockDeltaBySku, variantDeltas } = aggregateStockDelta([
+      { sku: "A", quantity: 1, variantId: "negro" },
+      { sku: "A", quantity: 2, variantId: "blanco" },
+      { sku: "A", quantity: 4, variantId: "negro" },
+    ]);
+    expect(stockDeltaBySku.get("A")).toBe(7);
+    expect(variantDeltas.get("A")?.get("negro")).toBe(5);
+    expect(variantDeltas.get("A")?.get("blanco")).toBe(2);
+  });
+
+  it("ignora líneas con sku vacío o cantidad no válida", () => {
+    const { stockDeltaBySku } = aggregateStockDelta([
+      { sku: "", quantity: 3 },
+      { sku: "A", quantity: 0 },
+      { sku: "A", quantity: 1.5 },
+      { quantity: 2 },
+      { sku: "B", quantity: 2 },
+    ]);
+    expect(stockDeltaBySku.size).toBe(1);
+    expect(stockDeltaBySku.get("B")).toBe(2);
+  });
+
+  it("el total por SKU incluye las líneas con variante (misma cuenta que adjustStock)", () => {
+    const items = [
+      { sku: "A", quantity: 1, variantId: "negro" },
+      { sku: "A", quantity: 2 },
+    ];
+    const { stockDeltaBySku } = aggregateStockDelta(items);
+    // El inventario se descuenta por SKU usando esta misma función tanto al
+    // crear como al reponer: las cuentas siempre cuadran.
+    expect(stockDeltaBySku.get("A")).toBe(3);
+  });
+});
+
+describe("netStockDelta", () => {
+  it("cantidad reducida devuelve unidades al inventario", () => {
+    const { increase, decrease } = netStockDelta(
+      [{ sku: "A", quantity: 3 }],
+      [{ sku: "A", quantity: 1 }]
+    );
+    expect(decrease.stockDeltaBySku.get("A")).toBe(2);
+    expect(increase.stockDeltaBySku.size).toBe(0);
+  });
+
+  it("cantidad aumentada descuenta unidades adicionales", () => {
+    const { increase, decrease } = netStockDelta(
+      [{ sku: "A", quantity: 1 }],
+      [{ sku: "A", quantity: 4 }]
+    );
+    expect(increase.stockDeltaBySku.get("A")).toBe(3);
+    expect(decrease.stockDeltaBySku.size).toBe(0);
+  });
+
+  it("renglón borrado devuelve todo su stock", () => {
+    const { increase, decrease } = netStockDelta(
+      [
+        { sku: "A", quantity: 2, variantId: "negro" },
+        { sku: "B", quantity: 1 },
+      ],
+      [{ sku: "B", quantity: 1 }]
+    );
+    expect(decrease.stockDeltaBySku.get("A")).toBe(2);
+    expect(decrease.variantDeltas.get("A")?.get("negro")).toBe(2);
+    expect(increase.stockDeltaBySku.size).toBe(0);
+  });
+
+  it("edición sin tocar cantidades devuelve ambos grupos vacíos", () => {
+    const { increase, decrease } = netStockDelta(
+      [{ sku: "A", quantity: 1 }],
+      [{ sku: "A", quantity: 1, note: "envolver" } as any]
+    );
+    expect(increase.stockDeltaBySku.size).toBe(0);
+    expect(decrease.stockDeltaBySku.size).toBe(0);
+  });
+
+  it("variantes distintas se ajustan por separado", () => {
+    const { increase, decrease } = netStockDelta(
+      [
+        { sku: "A", quantity: 1, variantId: "negro" },
+        { sku: "A", quantity: 5, variantId: "blanco" },
+      ],
+      [
+        { sku: "A", quantity: 3, variantId: "negro" },
+        { sku: "A", quantity: 4, variantId: "blanco" },
+      ]
+    );
+    expect(increase.variantDeltas.get("A")?.get("negro")).toBe(2);
+    expect(decrease.variantDeltas.get("A")?.get("blanco")).toBe(1);
+    // El total por SKU solo se usa en productos sin variantes; para variantes
+    // las diferencias viven en los mapas por variante.
+    expect(increase.stockDeltaBySku.get("A")).toBe(1);
+  });
+
+  it("mezcla aumento en una línea y reducción en otra del mismo pedido", () => {
+    const { increase, decrease } = netStockDelta(
+      [
+        { sku: "A", quantity: 1 },
+        { sku: "B", quantity: 5 },
+      ],
+      [
+        { sku: "A", quantity: 3 },
+        { sku: "B", quantity: 2 },
+      ]
+    );
+    expect(increase.stockDeltaBySku.get("A")).toBe(2);
+    expect(decrease.stockDeltaBySku.get("B")).toBe(3);
+  });
+
+  it("un renglón nuevo en el pedido descuenta", () => {
+    const { increase, decrease } = netStockDelta(
+      [],
+      [{ sku: "A", quantity: 2 }]
+    );
+    expect(increase.stockDeltaBySku.get("A")).toBe(2);
+    expect(decrease.stockDeltaBySku.size).toBe(0);
   });
 });

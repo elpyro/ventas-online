@@ -182,6 +182,89 @@ export function parseItems(raw: unknown): OrderItemInput[] {
   return [...merged.values()];
 }
 
+// Desglose agregado del inventario a descontar/reponer por SKU y variante.
+export type StockDeltaBySku = Map<string, number>;
+export type VariantDeltas = Map<string, Map<string, number>>;
+
+/**
+ * Agrega las cantidades por SKU (y por variante) de las líneas de un pedido.
+ * Es la base única del descuento al crear el pedido y de la reposición al
+ * cancelar, para que ambas cuentas siempre cuadren. Pura y testeable.
+ */
+export function aggregateStockDelta(
+  items: Array<{ sku?: unknown; quantity?: unknown; variantId?: unknown }>
+): { stockDeltaBySku: StockDeltaBySku; variantDeltas: VariantDeltas } {
+  const stockDeltaBySku: StockDeltaBySku = new Map();
+  const variantDeltas: VariantDeltas = new Map();
+  for (const it of items) {
+    const sku = String(it.sku ?? "");
+    if (!sku) continue;
+    const qty = Number(it.quantity ?? 0);
+    if (!Number.isInteger(qty) || qty < 1) continue;
+    stockDeltaBySku.set(sku, (stockDeltaBySku.get(sku) ?? 0) + qty);
+    if (typeof it.variantId === "string" && it.variantId) {
+      const byVariant = variantDeltas.get(sku) ?? new Map<string, number>();
+      byVariant.set(it.variantId, (byVariant.get(it.variantId) ?? 0) + qty);
+      variantDeltas.set(sku, byVariant);
+    }
+  }
+  return { stockDeltaBySku, variantDeltas };
+}
+
+// Grupos de ajuste: lo que se descuenta de más (aumento) y lo que se
+// devuelve al inventario (reducción). Cada uno se pasa a applyStockDeltaInTx.
+export type StockDeltaGroup = {
+  stockDeltaBySku: StockDeltaBySku;
+  variantDeltas: VariantDeltas;
+};
+
+function newStockDeltaGroup(): StockDeltaGroup {
+  return { stockDeltaBySku: new Map(), variantDeltas: new Map() };
+}
+
+/**
+ * Ajuste NETO entre dos versiones de las líneas de un pedido (la edición
+ * desde "Preparar Pedido" en el APK). Devuelve por separado el aumento a
+ * descontar y la reducción a devolver al inventario; si ninguna cantidad
+ * cambió, ambos grupos vienen vacíos y no se escribe nada.
+ */
+export function netStockDelta(
+  beforeItems: Array<{ sku?: unknown; quantity?: unknown; variantId?: unknown }>,
+  afterItems: Array<{ sku?: unknown; quantity?: unknown; variantId?: unknown }>
+): { increase: StockDeltaGroup; decrease: StockDeltaGroup } {
+  const before = aggregateStockDelta(beforeItems);
+  const after = aggregateStockDelta(afterItems);
+  const increase = newStockDeltaGroup();
+  const decrease = newStockDeltaGroup();
+  const bucket = (delta: number): StockDeltaGroup =>
+    delta > 0 ? increase : decrease;
+  const skus = new Set([
+    ...before.stockDeltaBySku.keys(),
+    ...after.stockDeltaBySku.keys(),
+  ]);
+  for (const sku of skus) {
+    // Total por SKU: lo usan los productos SIN variantes; para variantes el
+    // servidor recalcula el stock total desde ellas y este valor se ignora.
+    const dSku =
+      (after.stockDeltaBySku.get(sku) ?? 0) - (before.stockDeltaBySku.get(sku) ?? 0);
+    if (dSku !== 0) {
+      bucket(dSku).stockDeltaBySku.set(sku, Math.abs(dSku));
+    }
+    // Deltas por variante: lo usan los productos CON variantes.
+    const bVar = before.variantDeltas.get(sku) ?? new Map<string, number>();
+    const aVar = after.variantDeltas.get(sku) ?? new Map<string, number>();
+    for (const variantId of new Set([...bVar.keys(), ...aVar.keys()])) {
+      const dv = (aVar.get(variantId) ?? 0) - (bVar.get(variantId) ?? 0);
+      if (dv === 0) continue;
+      const group = bucket(dv);
+      const byVariant = group.variantDeltas.get(sku) ?? new Map<string, number>();
+      byVariant.set(variantId, Math.abs(dv));
+      group.variantDeltas.set(sku, byVariant);
+    }
+  }
+  return { increase, decrease };
+}
+
 /**
  * Normaliza un SKU: los espacios SOLO se eliminan ("A 1" → "A1"). Casi todos
  * los productos se importaron con el SKU sin espacios y el ERP los manda con
