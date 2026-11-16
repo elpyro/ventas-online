@@ -66,7 +66,8 @@ cd ..
   `flutter build apk --release --dart-define=USE_EMULATORS=true`
   y `adb reverse tcp:8080 tcp:8080` (y 9099/9199/5001). Ver docs/runbook.md.
 - La pantalla de pedidos lista y filtra pedidos; cambiar el estado escribe en
-  `orders` (requiere el claim admin). Cancelar **no** repone stock.
+  `orders` (requiere el claim admin). Cancelar un pedido repone el stock
+  descontado (el stock se descuenta al crear el pedido, en estado pendiente).
 - No hay tests de widgets.
 - `google-services.json` debe existir para compilar; sin él, el build falla.
 - Las fotos y videos subidos quedan en Storage para siempre: borrarlos desde la

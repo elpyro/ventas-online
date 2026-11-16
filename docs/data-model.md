@@ -213,9 +213,12 @@ Todas las fechas de escritura usan `serverTimestamp()` o `new Date()` en Functio
 }
 ```
 
-> **Cancelar un pedido no repone stock.** `createOrder` descuenta inventario en la
-> misma transacción en la que crea el pedido, así que un pedido cancelado conserva el
-> descuento; si hace falta, ajusta el stock desde la app admin.
+> **Cancelar un pedido repone stock** (si el pedido lo tenía descontado):
+> `createOrder` descuenta inventario en la misma transacción en la que crea el
+> pedido (estado pendiente), y `onOrderStatusUpdated` lo repone al pasar a
+> "Cancelado". Los pedidos antiguos aún pendientes (creados antes de este
+> flujo, con `stockDecremented: false`) descuentan al pasar a "Listo", como
+> antes.
 
 ## `admin_tokens/{token}`
 
