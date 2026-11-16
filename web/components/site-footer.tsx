@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Store, Phone, MapPin, LayoutGrid, Music2 } from "lucide-react";
+import { waDigits, waLink } from "@/lib/whatsapp";
 
 export interface FooterCatalog {
   id: string;
@@ -119,12 +120,12 @@ export function SiteFooter({
               <p className="mt-2 flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <a
-                  href={`https://wa.me/${phoneContact}`}
+                  href={waLink(phoneContact) ?? "#"}
                   target="_blank"
                   rel="noreferrer"
                   className="transition-colors hover:text-white"
                 >
-                  +{phoneContact}
+                  +{waDigits(phoneContact)}
                 </a>
               </p>
             )}
@@ -132,12 +133,12 @@ export function SiteFooter({
               <p className="mt-2 flex items-center gap-2">
                 <Phone className="h-4 w-4" />
                 <a
-                  href={`https://wa.me/${phoneContact2}`}
+                  href={waLink(phoneContact2) ?? "#"}
                   target="_blank"
                   rel="noreferrer"
                   className="transition-colors hover:text-white"
                 >
-                  +{phoneContact2}
+                  +{waDigits(phoneContact2)}
                 </a>
               </p>
             )}

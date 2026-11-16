@@ -5,6 +5,8 @@ import Link from "next/link";
 import { HomeSearch } from "@/components/home-search";
 import { BannerCarousel } from "@/components/banner-carousel";
 import { HeroBadges } from "@/components/hero-badges";
+import { waDigits } from "@/lib/whatsapp";
+import { socialLink } from "@/lib/social";
 
 type Faq = { q: string; a: string };
 
@@ -54,7 +56,7 @@ export default async function Home() {
 
   const siteName = config?.companyName ?? "Ventas Online";
   const city = config?.city ?? "Bogotá";
-  const phone = String(config?.phoneContact ?? "").replace(/\D/g, "");
+  const phone = waDigits(String(config?.phoneContact ?? ""));
   const url = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   const money = new Intl.NumberFormat("es-CO", {
@@ -117,9 +119,11 @@ export default async function Home() {
           addressCountry: "CO",
         },
         areaServed: { "@type": "Country", name: "Colombia" },
-        sameAs: [config?.instagram, config?.facebook, config?.tiktok].filter(
-          (value) => typeof value === "string" && value.length > 0
-        ),
+        sameAs: [
+          socialLink("instagram", config?.instagram),
+          socialLink("facebook", config?.facebook),
+          socialLink("tiktok", config?.tiktok),
+        ].filter((v): v is string => Boolean(v)),
       },
       {
         "@type": "WebSite",

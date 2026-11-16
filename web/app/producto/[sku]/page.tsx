@@ -131,12 +131,44 @@ export default async function Page({
     },
   };
 
+  const breadcrumbItems = [
+    { "@type": "ListItem", position: 1, name: "Inicio", item: BASE_URL },
+    ...(catalog
+      ? [
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: String(catalog.title ?? catalogId),
+            item: `${BASE_URL}/catalogo/${encodeURIComponent(String(catalogId))}`,
+          },
+        ]
+      : []),
+    {
+      "@type": "ListItem",
+      position: catalog ? 3 : 2,
+      name: String(product.name ?? sku),
+      item: canonicalUrl,
+    },
+  ];
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: breadcrumbItems,
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbLd).replace(/</g, "\\u003c"),
         }}
       />
 

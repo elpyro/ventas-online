@@ -6,15 +6,12 @@ import { X } from "lucide-react";
 
 import { useCart } from "@/lib/cart";
 import { cartBarVisible } from "@/components/cart-float";
-
-function digits(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
+import { waDigits, waLink as buildWaLink } from "@/lib/whatsapp";
 
 function waLink(phone: string): string {
-  const d = digits(phone);
-  const text = encodeURIComponent("Hola, quiero información de un producto.");
-  return `https://wa.me/${d}?text=${text}`;
+  const link = buildWaLink(phone, "Hola, quiero información de un producto.");
+  // list ya filtró números válidos; esta rama nunca debería verse.
+  return link ?? `https://wa.me/${waDigits(phone)}`;
 }
 
 /** Logo oficial de WhatsApp (simple-icons, CC0). */
@@ -43,7 +40,7 @@ export function WhatsappFloat({ phones }: { phones: string[] }) {
   const [open, setOpen] = useState(false);
   const list = (phones ?? [])
     .map((p) => String(p ?? "").trim())
-    .filter((p) => digits(p).length >= 8);
+    .filter((p) => waDigits(p).length >= 8);
   if (list.length === 0) return null;
 
   // Por encima de la barra flotante del carrito si está visible.

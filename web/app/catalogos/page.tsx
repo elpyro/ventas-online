@@ -3,9 +3,9 @@ import { getCatalogs } from "@/lib/serverData";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Catálogos",
+  title: "Catálogos al por mayor en Bogotá",
   description:
-    "Explora los catálogos mayoristas de Ventas Online: hogar, tecnología y más.",
+    "Catálogos mayoristas de CELTOONS en Bogotá: estuchería, tecnología, vidrios, bisutería y más. Compra desde $200.000 con envíos a toda Colombia.",
   alternates: { canonical: "/catalogos" },
 };
 
@@ -20,9 +20,9 @@ export default async function CatalogosPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: "Catálogos mayoristas",
+    name: "Catálogos mayoristas de CELTOONS",
     description:
-      "Listado de catálogos mayoristas disponibles para compra online.",
+      "Listado de catálogos mayoristas de CELTOONS: accesorios de celular, tecnología, vidrios y más, con envíos a toda Colombia desde Bogotá.",
     mainEntity: {
       "@type": "ItemList",
       itemListElement: active.map((c: any, index: number) => ({

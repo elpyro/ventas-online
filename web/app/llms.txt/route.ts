@@ -1,11 +1,19 @@
 ﻿import { getStoreConfig, getCatalogs, getAllProducts } from "@/lib/serverData";
 import { productAvailable, productVisible } from "@/lib/types";
+import { waDigits } from "@/lib/whatsapp";
+import { socialLink, SOCIAL_BASE } from "@/lib/social";
 import type { Catalog, Product, StoreConfig } from "@/lib/types";
 
 const BASE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(
   /\/$/,
   ""
 );
+
+/** Línea "- Red: URL" para llms.txt; cadena vacía si no hay enlace. */
+function socialUrl(network: keyof typeof SOCIAL_BASE, value: unknown): string {
+  const link = socialLink(network, value);
+  return link ? `- ${SOCIAL_BASE[network].label}: ${link}` : "";
+}
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("es-CO", {
@@ -53,8 +61,8 @@ export async function GET() {
         )
         .filter(Boolean)
     : [];
-  const phone = String(store?.phoneContact ?? "").replace(/\D/g, "");
-  const phone2 = String(store?.phoneContact2 ?? "").replace(/\D/g, "");
+  const phone = waDigits(String(store?.phoneContact ?? ""));
+  const phone2 = waDigits(String(store?.phoneContact2 ?? ""));
 
   const visibleCatalogs = catalogs
     .filter((c) => c?.isActive !== false && c?.isVisible !== false)
@@ -95,9 +103,9 @@ export async function GET() {
     `- Ciudad: ${city}, Colombia`,
     "- Cobertura: despachos a todo el país",
     "- Moneda: peso colombiano (COP)",
-    store?.instagram ? `- Instagram: ${String(store.instagram)}` : "",
-    store?.facebook ? `- Facebook: ${String(store.facebook)}` : "",
-    store?.tiktok ? `- TikTok: ${String(store.tiktok)}` : "",
+    socialUrl("instagram", store?.instagram),
+    socialUrl("facebook", store?.facebook),
+    socialUrl("tiktok", store?.tiktok),
     "",
     "## Páginas principales",
     "",
