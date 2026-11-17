@@ -33,6 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _registerFcm() async {
     // En el emulador (o sin Google Play Services) esto falla: no es crítico.
     try {
+      // Android 13+ no entrega pushes sin el permiso en Runtime.
+      // En versiones anteriores Android lo ignora y devuelve authorized.
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
         await FirebaseFirestore.instance

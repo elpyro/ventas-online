@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Necesario para que la app hable con Firebase (Firestore, Storage, Auth). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Avisos push de nuevos pedidos (Android 13+ la pide en Runtime; ver dashboard_screen.dart). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Administrador Celtoons"
         android:name="${applicationName}"

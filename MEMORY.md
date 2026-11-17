@@ -6,22 +6,22 @@ Actualizar solo en hitos importantes, no en cada conversación.
 
 ## Estado actual
 
-- **AUDITORÍA DE SEGURIDAD 2026-11-13 (sin desplegar todavía)**: doce chequeos revisados;
-  correcciones en `functions/src/index.ts` (PII fuera de `getOrderDetails`, `getOrdersByPhone` 30/5min
-  + 200/hora y oculta borradores `selecting`, `saveSelectingDraft` con regex de `clientKey` + throttle,
-  `webhookSku` sin CORS + `timingSafeEqual`, HTML del correo con `escapeHtml`, fallback público
-  `makePublic()` ELIMINADO — el PDF nunca se hace público, Gemini solo por env/`private_config`,
-  `maxInstances: 20` en funciones públicas) y en `web/` (cabeceras nosniff/DENY/Referrer-Policy/
-  Permissions-Policy/HSTS 1 año sin preload, `images.remotePatterns` restringido, login con errores
-  genéricos, checkout sin filtrar códigos internos, `/api/search?q` truncado a 80, Mis pedidos con
-  dirección desde `localStorage`). Verificado: builds OK, 32 tests functions, webhook:test 18/18,
-  emulador 15/15 checks, web 20/20 checks, APK en el Redmi contra emulador (login admin@ventas.test OK;
-  PDF autenticado devuelve `FAILED_PRECONDITION` — ya NO se pone público). **Sin deploy**: falta tu OK.
-  Ojo: el APK llama a las Functions HTTP con URL de prod hardcodeada (`getOrderPdfUrl`,
-  `generateProductDescription`), sin interruptor de emulador; y cambiar solo `--dart-define` no
-  recompila el kernel de Dart → quitarlo requiere `flutter clean` y recompilar.
-  El emulador se reinició durante la auditoría y se re-sembró (copia de prod + demo); puede quedar
-  un pedido de prueba "CLIENTE PRUEBA AUDITORIA".
+- **AUDITORÍA DE SEGURIDAD 2026-11-13 (DESPLEGADA PARCIAL: functions sí; web vía Netlify en build)**:
+  Functions de producción ya corren los fixes (deploy `bdbffbd`). Las reglas de
+  Firestore/Storage quedaron SIN cambios. El bucket tiene UBLA desactivado (ACLs
+  antiguos) y faltaba `iam.serviceAccounts.signBlob` → el APK falló el share del PDF
+  en producción (ahora con mensaje limpio, nunca público). Hallazgos y estado:
+  8 PDFs públicos (de 31 revisados) borrados y su `pdfPath` limpiado
+  (403 verificado); el resto responde 403; `store_config/general` NO contiene
+  `geminiApiKey`; webhook responde 401 sin secreto (verificado en prod).
+  El commit `bdbffbd` está en `main` → Netlify reconstruye la web con los
+  fixes (cabeceras, login/checkout sin filtrar errores, imágenes restringidas,
+  /api/search truncado, Mis pedidos con dirección local).
+  Pendiente: dar `signBlob` (consola/IAM) o UBLA ON; considerar notificar a los 8
+  pedidos con PII expuesta; signed URL de PDFs; `firebase` 9→13, `firebase-admin`
+  12→14; App Check; APK (URL hardcodeada a prod para getOrderPdfUrl y
+  generateProductDescription, AuthGate sin re-chequeo de claim admin); firmar el APK.
+  El emulador sigue re-sembrado; puede quedar un pedido "CLIENTE PRUEBA AUDITORIA".
 
 - Proyecto Firebase: `ventas-online-ec`. CLI fijado con `firebase use ventas-online-ec`.
 - **Respaldo en GitHub**: https://github.com/elpyro/ventas-online (privado, rama `main`).
@@ -186,6 +186,9 @@ Actualizar solo en hitos importantes, no en cada conversación.
 8. ~~Migrar el listado del catálogo a Server Components~~ HECHO (2026-11-12).
 9. Revisar los catálogos demo vacíos (`hogar`, `tecnologia`, `m`): ocultarlos
    desde el APK o borrarlos cuando haya productos reales para ellos.
+10. **Próximo cambio en la web**: colocar el icono `C:\Users\eloy_\Downloads\logo celtoons.png`
+    como icono de la web (favicon/`app/icon.png` o similar en Next) para que también
+    se vea en las pestañas del navegador.
 
 ## Decisiones
 

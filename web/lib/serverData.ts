@@ -36,13 +36,21 @@ function parseDoc(doc: any) {
   return out;
 }
 
+function sdFail(label: string, url: string, info: unknown) {
+  console.error(`[serverData] ${label} FALLA`, url, info);
+}
+
 export async function getStoreConfig() {
   try {
     const res = await fetch(`${BASE}/store_config/general`, { next: { revalidate: 60 } });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      sdFail("store_config", `${BASE}/store_config/general`, `HTTP ${res.status}`);
+      return null;
+    }
     const doc = await res.json();
     return parseDoc(doc);
-  } catch {
+  } catch (e) {
+    sdFail("store_config", `${BASE}/store_config/general`, e);
     return null;
   }
 }
@@ -64,10 +72,14 @@ export async function getCatalog(id: string) {
 export async function getCatalogs() {
   try {
     const res = await fetch(`${BASE}/catalogs`, { next: { revalidate: 60 } });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      sdFail("catalogs", `${BASE}/catalogs`, `HTTP ${res.status}`);
+      return [];
+    }
     const json = await res.json();
     return (json.documents ?? []).map(parseDoc);
-  } catch {
+  } catch (e) {
+    sdFail("catalogs", `${BASE}/catalogs`, e);
     return [];
   }
 }
@@ -110,14 +122,16 @@ export async function getProductsByCatalog(catalogId: string) {
 
 export async function getProduct(sku: string) {
   try {
-    const res = await fetch(
-      `${BASE}/products/${encodeURIComponent(sku)}`,
-      { next: { revalidate: 30 } }
-    );
-    if (!res.ok) return null;
+    const url = `${BASE}/products/${encodeURIComponent(sku)}`;
+    const res = await fetch(url, { next: { revalidate: 30 } });
+    if (!res.ok) {
+      sdFail("product", url, `HTTP ${res.status}`);
+      return null;
+    }
     const doc = await res.json();
     return parseDoc(doc);
-  } catch {
+  } catch (e) {
+    sdFail("product", `${BASE}/products/${encodeURIComponent(sku)}`, e);
     return null;
   }
 }

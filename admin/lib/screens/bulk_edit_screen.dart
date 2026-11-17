@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../services/product_media_service.dart';
 import '../theme/soft_theme.dart';
 
 /// Producto elegido para edición masiva: SKU + datos actuales. Los datos se
@@ -131,6 +135,10 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
   /// false = las etiquetas se agregan a las existentes; true = se reemplazan.
   bool replaceTags = false;
 
+  /// Foto elegida para aplicar como PRIMERA imagen a todos los seleccionados
+  /// (la portada actual pasa a segundo lugar). null = no tocar fotos.
+  XFile? coverPhoto;
+
   bool saving = false;
   String? error;
 
@@ -156,6 +164,16 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
       saving = false;
     });
     SoftTheme.showSnack(context, message, type: SnackType.error);
+  }
+
+  Future<void> _pickCoverPhoto() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 1600,
+    );
+    if (file == null || !mounted) return;
+    setState(() => coverPhoto = file);
   }
 
   // ------------------------------------------------------------------
@@ -242,20 +260,20 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
       catalogsToRemove: catalogsToRemove,
     );
 
-    if (input.touchesNothing) {
+    if (input.touchesNothing && coverPhoto == null) {
       _showError('Cambia al menos un campo para editar los productos.');
       return;
     }
 
-    final plan = _buildUpdates(input);
+    final plan = _buildUpdates(input, includeCoverPhoto: coverPhoto != null);
 
-    if (plan.updatesBySku.isEmpty) {
+    if (plan.updatesBySku.isEmpty && coverPhoto == null) {
       _showError(
           'Con estos cambios ningún producto se puede actualizar. Revisa las advertencias.');
       return;
     }
 
-    final confirmed = await _confirmDialog(plan);
+    final confirmed = await _confirmDialog(plan, coverPhoto: coverPhoto != null);
     if (confirmed != true || !mounted) return;
 
     setState(() {
@@ -263,13 +281,45 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
       error = null;
     });
     try {
+      // La foto se sube producto por producto (cada uno con su propio objeto
+      // en Storage) y se antepone a su galería. Los fallos se reportan por
+      // SKU sin cortar el resto de los cambios.
+      final photoFailed = <String>[];
+      if (coverPhoto != null) {
+        final media = ProductMediaService();
+        for (final p in widget.products) {
+          try {
+            final url = await media.uploadProductImage(p.sku, coverPhoto!);
+            final existing = (p.data['images'] as List?)
+                    ?.whereType<String>()
+                    .toList() ??
+                const <String>[];
+            final merged = plan.updatesBySku[p.sku] ?? <String, dynamic>{};
+            merged['images'] = [url, ...existing];
+            merged['updatedAt'] = FieldValue.serverTimestamp();
+            plan.updatesBySku[p.sku] = merged;
+          } catch (_) {
+            photoFailed.add(p.sku);
+          }
+        }
+        if (plan.updatesBySku.isEmpty) {
+          _showError(
+              'No se pudo subir la foto a ningún producto. Revisa tu conexión e inténtalo otra vez.');
+          return;
+        }
+      }
       await _commit(plan.updatesBySku);
       if (!mounted) return;
+      var message =
+          'Se actualizaron ${plan.updatesBySku.length} de '
+          '${widget.products.length} productos';
+      if (photoFailed.isNotEmpty) {
+        message += '. Foto no subida: ${photoFailed.join(', ')}';
+      }
       SoftTheme.showSnack(
         context,
-        'Se actualizaron ${plan.updatesBySku.length} de '
-        '${widget.products.length} productos',
-        type: SnackType.success,
+        message,
+        type: photoFailed.isEmpty ? SnackType.success : SnackType.error,
       );
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -282,7 +332,8 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
 
   /// Cambios que se aplicarán a cada producto. Campos vacíos o "Sin cambiar"
   /// simplemente no entran en el mapa: Firestore solo recibe lo editado.
-  _BulkPlan _buildUpdates(_BulkInput input) {
+  _BulkPlan _buildUpdates(_BulkInput input,
+      {bool includeCoverPhoto = false}) {
     final updatesBySku = <String, Map<String, dynamic>>{};
     var skippedByVariants = 0;
     var skippedByCatalogs = 0;
@@ -390,17 +441,25 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
         if (input.seoDescription.isNotEmpty) 'descripción SEO',
         if (input.specs != null && input.specs!.isNotEmpty)
           'especificaciones (${input.specs!.length})',
+        if (includeCoverPhoto) 'foto de portada (primera imagen)',
       ],
     );
   }
 
-  Future<bool?> _confirmDialog(_BulkPlan plan) {
+  Future<bool?> _confirmDialog(_BulkPlan plan, {bool coverPhoto = false}) {
     final notes = <String>[
+      if (coverPhoto)
+        'La foto elegida quedará como primera imagen de cada producto (la portada actual pasa a segundo lugar).',
       if (plan.skippedByVariants > 0)
         '${plan.skippedByVariants} producto(s) tienen variantes y conservan su stock (se calcula por variante).',
       if (plan.skippedByCatalogs > 0)
         '${plan.skippedByCatalogs} producto(s) quedarían sin catálogo y no se cambian.',
     ];
+    // Si se eligió foto, TODOS los seleccionados reciben la foto aunque no
+    // toquen ningún otro campo (el mapa de updates se completa tras
+    // confirmar, al subir las imágenes).
+    final effectiveCount =
+        coverPhoto ? widget.products.length : plan.updatesBySku.length;
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -410,7 +469,7 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-                'Se actualizarán ${plan.updatesBySku.length} de ${widget.products.length} productos.'),
+                'Se actualizarán $effectiveCount de ${widget.products.length} productos.'),
             const SizedBox(height: 8),
             Text('Campos: ${plan.fields.join(', ')}.'),
             for (final n in notes) ...[
@@ -524,6 +583,47 @@ class _BulkEditScreenState extends State<BulkEditScreen> {
                     helperText: 'Menor = aparece primero en la web',
                   ),
                 ),
+                const SizedBox(height: 28),
+                const _SectionTitle('Foto de portada'),
+                const Text(
+                  'Una sola foto para todos los seleccionados: queda como primera imagen (la portada actual pasa a segundo lugar).',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                if (coverPhoto == null)
+                  OutlinedButton.icon(
+                    onPressed: saving ? null : _pickCoverPhoto,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: const Text('Elegir foto…'),
+                  )
+                else
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(coverPhoto!.path),
+                          width: 84,
+                          height: 84,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Portada nueva para los ${widget.products.length} productos',
+                          style: const TextStyle(
+                              fontSize: 12, color: SoftTheme.textMuted),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: saving
+                            ? null
+                            : () => setState(() => coverPhoto = null),
+                        child: const Text('Quitar'),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 28),
                 const _SectionTitle('Catálogos'),
                 const Text(

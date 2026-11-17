@@ -30,33 +30,43 @@ class MainActivity : FlutterActivity() {
         if (filePath.isEmpty()) return false
         val file = File(filePath)
         if (!file.exists()) return false
-        val pm: PackageManager = packageManager
         val whatsappInstalled = try {
-            pm.getPackageInfo("com.whatsapp", 0)
+            packageManager.getPackageInfo("com.whatsapp", 0)
             true
         } catch (e: PackageManager.NameNotFoundException) {
             false
         }
         if (!whatsappInstalled) return false
         val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+        val digits = phone.filter { it.isDigit() }
+        // Sin chooser y con paquete fijo: WhatsApp recibe el intent directo y
+        // abre la conversación (o el selector interno, pero sin doble menú).
+        // El jid es un mecanismo no oficial: si WhatsApp lo ignora, cae al selector.
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
             setPackage("com.whatsapp")
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_TEXT, text)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if (phone.isNotEmpty()) {
-                val digits = phone.filter { it.isDigit() }
-                if (digits.isNotEmpty()) {
-                    putExtra("jid", "$digits@s.whatsapp.net")
-                }
+            if (digits.length in 7..15) {
+                putExtra("jid", "$digits@s.whatsapp.net")
             }
         }
         return try {
-            startActivity(Intent.createChooser(intent, "Enviar por WhatsApp").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            startActivity(intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             true
         } catch (e: Exception) {
-            false
+            // Respaldo: dejar que el sistema muestre el selector de apps.
+            try {
+                startActivity(
+                    Intent.createChooser(intent, "Enviar por WhatsApp").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+                true
+            } catch (e2: Exception) {
+                false
+            }
         }
     }
 }

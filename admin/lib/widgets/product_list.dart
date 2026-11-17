@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../screens/bulk_edit_screen.dart';
 import '../screens/product_edit_screen.dart';
 import '../services/product_media_service.dart';
 import '../services/search_normalizer.dart';
+import '../services/share_products_service.dart';
 import '../theme/soft_theme.dart';
 import '../utils/money.dart';
+import 'share_products_dialog.dart';
 
 enum ProductFilter { todos, disponibles, agotados, destacados }
 
@@ -96,6 +99,9 @@ class _ProductListState extends State<ProductList> {
   /// Los SKUs elegidos se guardan en un set (el ID del producto es su SKU).
   final Set<String> _selectedSkus = {};
   bool _selectionMode = false;
+
+  /// Evita disparar dos veces el flujo de compartir (diálogo + descargas).
+  bool _sharing = false;
 
   @override
   void initState() {
@@ -261,6 +267,7 @@ class _ProductListState extends State<ProductList> {
                         onToggleAll: () => _toggleSelectAll(docs),
                         onEdit: () => _openBulkEdit(docs),
                         onDelete: () => _deleteSelected(docs),
+                        onShare: () => _shareSelected(docs),
                         allSelected: docs.isNotEmpty &&
                             docs.every((d) => _selectedSkus.contains(d.id)),
                       ),
@@ -336,6 +343,75 @@ class _ProductListState extends State<ProductList> {
       ),
     );
     if (mounted) _exitSelection();
+  }
+
+  Future<void> _shareSelected(List<QueryDocumentSnapshot> docs) async {
+    if (_sharing) return;
+    // Solo los seleccionados que siguen visibles (el filtro puede haber
+    // cambiado desde que se marcaron).
+    final selected = docs.where((d) => _selectedSkus.contains(d.id)).toList();
+    if (selected.isEmpty) return;
+
+    final remembered = await loadShareFields();
+    if (!mounted) return;
+    final fields = await showShareFieldsDialog(
+      context,
+      count: selected.length,
+      initial: remembered,
+    );
+    if (fields == null || !mounted) return;
+    setState(() => _sharing = true);
+    try {
+      await saveShareFields(fields);
+      final products = [
+        for (final d in selected)
+          ShareProduct(
+            sku: d.id,
+            data: d.data() as Map<String, dynamic>,
+          ),
+      ];
+      final message = buildShareMessage(products, fields);
+      final subject = products.length == 1
+          ? (products.first.data['name']?.toString().trim().isNotEmpty == true
+              ? products.first.data['name'].toString().trim()
+              : products.first.sku)
+          : 'Productos CELTOONS';
+
+      if (fields.image) {
+        final covers = await downloadCovers(products);
+        if (covers.paths.isNotEmpty) {
+          await SharePlus.instance.share(ShareParams(
+            files: [for (final p in covers.paths) XFile(p)],
+            text: message,
+            subject: subject,
+          ));
+        } else {
+          // Ninguna portada se pudo bajar: se comparte solo el texto.
+          await SharePlus.instance
+              .share(ShareParams(text: message, subject: subject));
+        }
+        if (mounted && covers.failed.isNotEmpty) {
+          SoftTheme.showSnack(
+            context,
+            'Sin imagen de: ${covers.failed.join(', ')}',
+            type: SnackType.error,
+          );
+        }
+      } else {
+        await SharePlus.instance
+            .share(ShareParams(text: message, subject: subject));
+      }
+    } catch (e) {
+      if (mounted) {
+        SoftTheme.showSnack(
+          context,
+          'No se pudo compartir: $e',
+          type: SnackType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
   }
 
   Future<void> _deleteSelected(List<QueryDocumentSnapshot> docs) async {
@@ -658,6 +734,7 @@ class _SelectionBar extends StatelessWidget {
     required this.onToggleAll,
     required this.onEdit,
     required this.onDelete,
+    required this.onShare,
   });
 
   final int count;
@@ -666,6 +743,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onToggleAll;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -692,6 +770,11 @@ class _SelectionBar extends StatelessWidget {
                 ? 'Quitar toda la selección'
                 : 'Seleccionar todos los visibles',
             onPressed: onToggleAll,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'Compartir seleccionados',
+            onPressed: count == 0 ? null : onShare,
           ),
           IconButton(
             icon: const Icon(Icons.edit),

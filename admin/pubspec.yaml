@@ -1,7 +1,7 @@
 name: ventas_online_admin
 description: APK administrativo Ventas Online
 publish_to: "none"
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -22,6 +22,7 @@ dependencies:
   flutter_image_compress: ^2.3.0
   http: ^1.2.0
   share_plus: ^12.0.0
+  shared_preferences: ^2.3.2
   path_provider: ^2.1.5
   url_launcher: ^6.3.1
   cached_network_image: ^3.3.0
