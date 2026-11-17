@@ -428,8 +428,19 @@ export const createOrder = onCall(
       // El stock SE descuenta al crear (estado pendiente); si el pedido se
       // cancela después, onOrderStatusUpdated lo repone al pasar a "Cancelado".
 
-      // Solo actualizamos el perfil si el pedido pertenece al usuario autenticado.
-      if (request.auth?.token.phone_number === phone) {
+      // Actualizamos (o creamos) la ficha del cliente con metricas de CRM.
+      // Se hace siempre, incluso para invitados, porque el pedido ya se creo con
+      // esos datos; el servidor (admin SDK) bypassa las reglas de Firestore.
+      // Los campos calculados (orderCount, totalSpent, ...) son fuente de verdad
+      // del servidor y no deben escribirse desde el cliente.
+      {
+        const existing = customerSnap.exists ? (customerSnap.data() ?? {}) : {};
+        const prevCount =
+          typeof existing.orderCount === "number" ? existing.orderCount : 0;
+        const prevTotal =
+          typeof existing.totalSpent === "number" ? existing.totalSpent : 0;
+        const newCount = prevCount + 1;
+        const newTotal = roundMoney(prevTotal + total);
         tx.set(
           customerRef,
           {
@@ -438,6 +449,15 @@ export const createOrder = onCall(
             email,
             address,
             ...(customerSnap.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+            ...(customerSnap.exists && existing.firstOrderAt
+              ? {}
+              : { firstOrderAt: FieldValue.serverTimestamp() }),
+            lastOrderAt: FieldValue.serverTimestamp(),
+            orderCount: newCount,
+            totalSpent: newTotal,
+            avgTicket: roundMoney(newTotal / newCount),
+            status: typeof existing.status === "string" ? existing.status : "active",
+            ...(customerSnap.exists ? {} : { tags: [], notes: [] }),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true }

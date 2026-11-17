@@ -157,7 +157,18 @@ Todas las fechas de escritura usan `serverTimestamp()` o `new Date()` en Functio
 | `name` | string | sí | Nombre del cliente |
 | `email` | string | sí | Correo para la confirmación |
 | `address` | string | sí | Dirección de entrega |
+| `city` | string | no | Ciudad (CRM, segmentación) |
 | `createdAt` | timestamp | sí | Alta del cliente |
+| `firstOrderAt` | timestamp | no | Fecha del primer pedido (CRM) |
+| `lastOrderAt` | timestamp | no | Fecha del último pedido (CRM) |
+| `lastVisitedAt` | timestamp | no | Última visita registrada (CRM) |
+| `orderCount` | number | no | Número de pedidos (calculado por servidor) |
+| `totalSpent` | number | no | Total gastado en COP (calculado por servidor) |
+| `avgTicket` | number | no | Ticket promedio (calculado por servidor) |
+| `status` | string | no | lead / active / vip / inactive (CRM) |
+| `tags` | string[] | no | Etiquetas (CRM) |
+| `notes` | array | no | Notas internas [{at, by, text}] (CRM) |
+| `preferredCatalogs` | string[] | no | Catálogos más comprados (CRM) |
 
 ```json
 {

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'panel_screen.dart';
 import 'catalogs_screen.dart';
 import 'config_screen.dart';
+import 'customers_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -56,6 +57,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final screens = const [
       PanelScreen(),
+      CustomersScreen(),
       CatalogsScreen(),
       ConfigScreen(),
     ];
@@ -90,6 +92,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
             label: 'Panel',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outlined),
+            selectedIcon: Icon(Icons.people),
+            label: 'Clientes',
           ),
           NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),

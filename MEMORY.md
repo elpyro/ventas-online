@@ -107,6 +107,7 @@ Actualizar solo en hitos importantes, no en cada conversación.
   (`delta`), al bajar se actualiza el carrito (`updateQty`). Helper muestra
   "N unidad(es) disponibles · M en tu carrito". Botón: Agregar / Actualizar carrito /
   En el carrito / Agotado. E2E (`web/scripts/e2e-visits.mjs`) OK contra el emulador.
+- **CRM Fase 1 (2026-11-16)**: `customers/{phone}` ahora guarda métricas calculadas por el servidor en `createOrder` (orderCount, totalSpent, avgTicket, firstOrderAt, lastOrderAt, status, tags, notes). Nueva pantalla "Clientes" en el APK (búsqueda, filtros por estado, top clientes en el Panel). `CustomerDetailScreen` enriquecida con métricas, etiquetas y notas. Backfill: `npm --prefix functions run backfill:customers`. Fases 2-4 (segmentación/leads, comunicaciones, reportes) parcialmente: filtros por estado y top clientes listos; leads y correos masivos pendientes.
 - **Contador de visitas** (`metrics/visits`): anónimo y registrado, +1 por día y
   navegador (`visit-tracked:AAAA-MM-DD`), reglas `metrics/visits`. E2E OK.
 - Admin (APK): crea, edita y elimina productos y catálogos; sube fotos y video
@@ -164,6 +165,8 @@ Actualizar solo en hitos importantes, no en cada conversación.
 5. Cliente queda registrado en el navegador hasta cerrar sesión.
 
 ## Pendiente (priorizado)
+
+> CRM en progreso: Fase 1 desplegada en código (functions + APK). Pendiente: desplegar Functions, correr backfill en producción, probar en APK.
 
 1. Configurar `RESEND_API_KEY`/`RESEND_FROM` en `functions/.env` y
    redesplegar `onOrderCreated`: sin esos secretos no salen correos de
