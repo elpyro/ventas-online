@@ -99,9 +99,18 @@ export const webhookSku = onRequest(
     }
     const target = snap;
 
-    const existingData = target.data() as { variants?: unknown[] } | undefined;
-    const existingVariants = existingData?.variants;
+    const rawData = target.data() as
+      | { variants?: unknown[]; stock?: unknown; isAvailable?: unknown }
+      | undefined;
+    const existingVariants = rawData?.variants;
+    // Normalizamos las variantes leídas para sumar stock siempre en números.
+    const normalizedVariants = normalizeVariants(existingVariants ?? []);
     const hasVariants = Array.isArray(existingVariants) && existingVariants.length > 0;
+    // Stock "de verdad" del producto según lo que haya en Firestore ahora.
+    const currentStock = hasVariants
+      ? normalizedVariants.reduce((sum, v) => sum + Number(v.stock), 0)
+      : Number(rawData?.stock ?? 0) || 0;
+    const currentlyAvailable = rawData?.isAvailable === true;
 
     // Fotos, descripciÃ³n, nombre y precio los administra el APK: el webhook
     // no los pisa. Se reportan como ignorados para que quien llama sepa que
@@ -115,6 +124,16 @@ export const webhookSku = onRequest(
 
     // El stock de un producto con variantes se recalcula desde ellas: pisarlo
     // aquÃ­ romperÃ­a el inventario.
+    // Si el producto (ya) tiene stock, no lo mantengas oculto: encendemos
+    // Disponible para la venta. Nunca lo apagamos por este webhook.
+    const stockPayloadValid =
+      !hasVariants &&
+      typeof stock === "number" &&
+      Number.isInteger(stock) &&
+      stock >= 0;
+    const effectiveStock = stockPayloadValid ? (stock as number) : currentStock;
+    const shouldEnableAvailable = effectiveStock > 0 && !currentlyAvailable;
+
     if (hasVariants && stock !== undefined) ignored.push("stock");
 
     // Solo escribimos los campos que llegan y estÃ¡n permitidos: una
@@ -122,16 +141,16 @@ export const webhookSku = onRequest(
     const payload: Record<string, unknown> = {
       sku: target.id,
       updatedAt: new Date(),
+      ...(shouldEnableAvailable ? { isAvailable: true } : {}),
     };
 
-    if (
-      !hasVariants &&
-      typeof stock === "number" &&
-      Number.isInteger(stock) &&
-      stock >= 0
-    ) {
-      payload.stock = stock;
-      payload.isAvailable = stock > 0;
+    if (stockPayloadValid) {
+      payload.stock = stock as number;
+      // Solo activamos Disponible cuando el stock es > 0. Si llega 0 explícito,
+      // isAvailable se queda en la posición que tenía (no se fuerza).
+      if ((stock as number) > 0) {
+        payload.isAvailable = true;
+      }
     }
     if (Array.isArray(catalogIds)) {
       const valid = catalogIds.filter((id) => typeof id === "string" && id !== "");
