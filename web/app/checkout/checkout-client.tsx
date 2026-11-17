@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { MinimumOrderHint } from "@/components/minimum-order-hint";
 import { buildMinimumLines } from "@/components/cart-drawer";
 import { toast } from "@/hooks/use-toast";
+import { CheckoutAdjustDialog, type CheckoutAdjustment } from "@/components/checkout-adjust-dialog";
 import {
   CheckCircle2,
   CircleAlert,
@@ -48,7 +49,7 @@ type DoneOrder = {
 };
 
 export default function CheckoutPage() {
-  const { items, total, clear } = useCart();
+  const { items, total, clear, updateQty, removeItem } = useCart();
   const { user } = useAuth();
   const { customer: savedCustomer, saveCustomer } = useCustomer();
   const router = useRouter();
@@ -64,7 +65,12 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // true cuando el error es de inventario: se muestra el mensaje del servidor
+  // y el botón para ajustar el carrito antes de confirmar otra vez.
+  const [stockError, setStockError] = useState(false);
   const [done, setDone] = useState<DoneOrder | null>(null);
+  // null = el cuadro está cerrado; array = muestra los ajustes aplicados.
+  const [adjustments, setAdjustments] = useState<CheckoutAdjustment[] | null>(null);
 
   // Precarga datos guardados en este navegador (compras anteriores).
   useEffect(() => {
@@ -142,6 +148,7 @@ export default function CheckoutPage() {
 
   async function handleConfirm() {
     setError("");
+    setStockError(false);
     const v = validate();
     if (v) {
       setError(v);
@@ -176,9 +183,20 @@ export default function CheckoutPage() {
         orderTotal = response.data.total;
         itemCount = response.data.itemCount;
       } catch (e: any) {
-        // `createOrder` es la única vía autorizada para crear pedidos
-        // (las reglas rechazan `addDoc` directo en `orders`). El detalle real
-        // queda en consola; a la persona no se le muestran códigos internos.
+        // El servidor habla español y redacta para el cliente: no se muestran
+        // códigos ni detalles internos cuando el mensaje es seguro.
+        const serverMsg =
+          typeof e?.data?.message === "string"
+            ? e.data.message
+            : typeof e?.message === "string"
+              ? e.message
+              : "";
+        const isStockError = /stock|disponible|agotad/i.test(serverMsg);
+        if (isStockError) {
+          console.error("createOrder (stock)", e);
+          setStockError(true);
+          throw new Error(serverMsg);
+        }
         console.error("createOrder failed", e);
         throw new Error("No se pudo crear el pedido. Intenta de nuevo en unos minutos.");
       }
@@ -226,7 +244,71 @@ export default function CheckoutPage() {
         whatsappUrl: `https://wa.me/${waPhone}?text=${text}`,
       });
     } catch (e: any) {
+      // No tocamos setStockError aquí: si el fallo fue de inventario,
+      // la rama de createOrder marcó stockError y el botón debe quedar visible.
       setError(e?.message ?? "Error al crear pedido");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Recalcula el carrito contra el stock REAL (productos públicos, lectura
+  // anónima) y muestra un cuadro con todo lo que ajustamos o eliminamos.
+  async function adjustToStock() {
+    setSubmitting(true);
+    try {
+      const changes: CheckoutAdjustment[] = [];
+      for (const line of items) {
+        const snap = await getDoc(doc(db, "products", line.sku));
+        let available = 0;
+        if (snap.exists()) {
+          const p = snap.data() as any;
+          available = Number(p.stock ?? 0);
+          if (line.variantId) {
+            const match = Array.isArray(p.variants)
+              ? p.variants.find((v: any) => v && v.id === line.variantId)
+              : undefined;
+            available = match ? Number(match.stock ?? 0) : 0;
+          }
+        }
+        if (available > 0 && line.quantity > available) {
+          updateQty(line.key, available);
+          changes.push({
+            key: line.key,
+            sku: line.sku,
+            name: line.name,
+            image: line.image,
+            variantLabel: line.variantLabel,
+            unitPrice: line.price,
+            previousQuantity: line.quantity,
+            newQuantity: available,
+          });
+        } else if (available <= 0) {
+          removeItem(line.key);
+          changes.push({
+            key: line.key,
+            sku: line.sku,
+            name: line.name,
+            image: line.image,
+            variantLabel: line.variantLabel,
+            unitPrice: line.price,
+            previousQuantity: line.quantity,
+            newQuantity: 0,
+          });
+        }
+      }
+      setStockError(false);
+      if (changes.length > 0) {
+        setError("");
+        setAdjustments(changes);
+      } else {
+        setError(
+          "No pudimos ajustar nada: revisa que tus productos sigan existiendo en el catálogo."
+        );
+      }
+    } catch {
+      setError("No se pudo verificar el stock. Revisa la conexión e intenta de nuevo.");
+      setStockError(false);
     } finally {
       setSubmitting(false);
     }
@@ -345,9 +427,27 @@ export default function CheckoutPage() {
         </div>
       )}
       {error && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          <CircleAlert className="h-5 w-5 shrink-0" />
-          {error}
+        <div className="mt-4 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="flex items-center gap-2">
+            <CircleAlert className="h-5 w-5 shrink-0" />
+            {error}
+          </div>
+          {stockError && (
+            <>
+              <p className="pl-7 text-xs">
+                Ese producto ya no tiene suficiente stock. Puedes ajustar el
+                carrito al stock real y confirmar de nuevo.
+              </p>
+              <button
+                type="button"
+                onClick={adjustToStock}
+                disabled={submitting}
+                className="ml-7 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white shadow transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                {submitting ? "Verificando disponibilidad…" : "Ajustar carrito al stock disponible"}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -418,6 +518,13 @@ export default function CheckoutPage() {
           </p>
         )}
       </div>
+
+      {adjustments && (
+        <CheckoutAdjustDialog
+          adjustments={adjustments}
+          onClose={() => setAdjustments(null)}
+        />
+      )}
     </main>
   );
 }
